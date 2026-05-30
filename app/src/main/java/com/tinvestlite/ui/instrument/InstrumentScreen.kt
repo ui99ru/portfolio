@@ -19,10 +19,16 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -54,6 +60,7 @@ fun InstrumentScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     val mode by container.tokenStore.mode.collectAsStateWithLifecycle()
     val tradingEnabled = !mode.isReal
+    var chartType by rememberSaveable { mutableStateOf(ChartType.Candles) }
     val title = state.detail?.let { it.ticker.ifBlank { it.name } } ?: "Инструмент"
 
     Scaffold(
@@ -108,12 +115,16 @@ fun InstrumentScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 PriceHeader(state)
+                ChartTypeRow(chartType) { chartType = it }
                 TimeframeRow(state.timeframe, vm::selectTimeframe)
                 if (state.candlesLoading) {
                     LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
                 if (state.candles.isNotEmpty()) {
-                    CandleChart(state.candles)
+                    when (chartType) {
+                        ChartType.Candles -> CandleChart(state.candles)
+                        ChartType.Line -> LineChart(state.candles)
+                    }
                 } else if (!state.candlesLoading) {
                     Text(
                         "Нет данных по свечам за выбранный период.",
@@ -152,6 +163,25 @@ private fun PriceHeader(state: InstrumentUiState) {
                 fontWeight = FontWeight.Bold,
             )
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChartTypeRow(selected: ChartType, onSelect: (ChartType) -> Unit) {
+    SingleChoiceSegmentedButtonRow {
+        SegmentedButton(
+            selected = selected == ChartType.Candles,
+            onClick = { onSelect(ChartType.Candles) },
+            shape = SegmentedButtonDefaults.itemShape(0, 2),
+            icon = {},
+        ) { Text("Свечи") }
+        SegmentedButton(
+            selected = selected == ChartType.Line,
+            onClick = { onSelect(ChartType.Line) },
+            shape = SegmentedButtonDefaults.itemShape(1, 2),
+            icon = {},
+        ) { Text("Линия") }
     }
 }
 

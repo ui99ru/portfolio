@@ -10,6 +10,8 @@ import com.tinvestlite.data.remote.dto.GetAccountsRequest
 import com.tinvestlite.data.remote.dto.GetAccountsResponse
 import com.tinvestlite.data.remote.dto.GetCandlesRequest
 import com.tinvestlite.data.remote.dto.GetCandlesResponse
+import com.tinvestlite.data.remote.dto.GetClosePricesRequest
+import com.tinvestlite.data.remote.dto.GetClosePricesResponse
 import com.tinvestlite.data.remote.dto.GetLastPricesRequest
 import com.tinvestlite.data.remote.dto.GetLastPricesResponse
 import com.tinvestlite.data.remote.dto.GetOrderBookRequest
