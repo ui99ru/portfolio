@@ -16,6 +16,7 @@ import com.tinvestlite.data.remote.dto.GetOrdersRequest
 import com.tinvestlite.data.remote.dto.InstrumentRequest
 import com.tinvestlite.data.remote.dto.InstrumentDetail
 import com.tinvestlite.data.remote.dto.InstrumentShort
+import com.tinvestlite.data.remote.dto.InstrumentsRequest
 import com.tinvestlite.data.remote.dto.MoneyValue
 import com.tinvestlite.data.remote.dto.OpenSandboxAccountRequest
 import com.tinvestlite.data.remote.dto.Operation
@@ -97,6 +98,30 @@ class InvestRepository(
 
     suspend fun getInstrument(uid: String): ApiResult<InstrumentDetail> = safeCall {
         api.getInstrumentBy(InstrumentRequest(id = uid)).instrument
+    }
+
+    /** Tradable shares, tagged with instrumentType="share" and sorted by ticker. */
+    suspend fun getShares(): ApiResult<List<InstrumentShort>> = safeCall {
+        api.getShares(InstrumentsRequest()).instruments
+            .filter { it.apiTradeAvailableFlag }
+            .map { it.copy(instrumentType = "share") }
+            .sortedBy { it.ticker }
+    }
+
+    /** Tradable bonds, tagged with instrumentType="bond" and sorted by name. */
+    suspend fun getBonds(): ApiResult<List<InstrumentShort>> = safeCall {
+        api.getBonds(InstrumentsRequest()).instruments
+            .filter { it.apiTradeAvailableFlag }
+            .map { it.copy(instrumentType = "bond") }
+            .sortedBy { it.name }
+    }
+
+    /** Tradable ETFs, tagged with instrumentType="etf" and sorted by name. */
+    suspend fun getEtfs(): ApiResult<List<InstrumentShort>> = safeCall {
+        api.getEtfs(InstrumentsRequest()).instruments
+            .filter { it.apiTradeAvailableFlag }
+            .map { it.copy(instrumentType = "etf") }
+            .sortedBy { it.name }
     }
 
     suspend fun getCandles(

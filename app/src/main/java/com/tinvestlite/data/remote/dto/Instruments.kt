@@ -28,6 +28,23 @@ data class InstrumentShort(
     val currency: String = "",
 )
 
+/** Request for the Shares/Bonds/Etfs catalog endpoints. */
+@Serializable
+data class InstrumentsRequest(
+    val instrumentStatus: String = "INSTRUMENT_STATUS_BASE",
+)
+
+/**
+ * Response shared by Shares/Bonds/Etfs. Each item carries the common fields
+ * of [InstrumentShort]; type-specific extras are ignored by the parser.
+ * Note: these catalog items don't include `instrumentType`, so the repository
+ * tags it when mapping.
+ */
+@Serializable
+data class InstrumentsListResponse(
+    val instruments: List<InstrumentShort> = emptyList(),
+)
+
 @Serializable
 data class InstrumentRequest(
     val idType: String = "INSTRUMENT_ID_TYPE_UID",

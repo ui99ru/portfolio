@@ -1,6 +1,7 @@
 package com.tinvestlite.ui.market
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,10 +10,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -46,20 +51,46 @@ fun MarketScreen(
             onValueChange = vm::onQueryChange,
             label = { Text("Поиск: тикер, название, ISIN") },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            trailingIcon = {
+                if (state.query.isNotEmpty()) {
+                    IconButton(onClick = { vm.onQueryChange("") }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Очистить")
+                    }
+                }
+            },
             singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         )
 
+        // Category chips — hidden while searching, since search spans all types.
+        if (!state.isSearching) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                MarketCategory.entries.forEach { category ->
+                    FilterChip(
+                        selected = state.category == category,
+                        onClick = { vm.selectCategory(category) },
+                        label = { Text(category.label) },
+                    )
+                }
+            }
+        }
+
         if (state.isLoading) {
-            LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
+            LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 4.dp))
         }
 
         when {
-            state.error != null -> ErrorBox(state.error!!, Modifier.fillMaxSize())
-            state.query.length < 2 ->
-                EmptyBox("Введите минимум 2 символа для поиска инструмента.")
-            state.results.isEmpty() && !state.isLoading ->
+            state.error != null -> ErrorBox(state.error!!, Modifier.fillMaxSize(), onRetry = vm::retry)
+            state.isSearching && state.results.isEmpty() && !state.isLoading ->
                 EmptyBox("Ничего не найдено по запросу «${state.query}».")
+            !state.isSearching && state.results.isEmpty() && !state.isLoading ->
+                EmptyBox("В разделе «${state.category.label}» пока нет инструментов.")
             else -> LazyColumn(Modifier.fillMaxSize()) {
                 items(state.results, key = { it.uid }) { item ->
                     InstrumentRow(item, onOpenInstrument)

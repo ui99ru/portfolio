@@ -18,6 +18,8 @@ import com.tinvestlite.data.remote.dto.GetOrdersRequest
 import com.tinvestlite.data.remote.dto.GetOrdersResponse
 import com.tinvestlite.data.remote.dto.InstrumentRequest
 import com.tinvestlite.data.remote.dto.InstrumentResponse
+import com.tinvestlite.data.remote.dto.InstrumentsListResponse
+import com.tinvestlite.data.remote.dto.InstrumentsRequest
 import com.tinvestlite.data.remote.dto.OpenSandboxAccountRequest
 import com.tinvestlite.data.remote.dto.OpenSandboxAccountResponse
 import com.tinvestlite.data.remote.dto.OperationsRequest
@@ -87,6 +89,15 @@ interface TInvestApi {
 
     @POST("tinkoff.public.invest.api.contract.v1.InstrumentsService/GetInstrumentBy")
     suspend fun getInstrumentBy(@Body body: InstrumentRequest): InstrumentResponse
+
+    @POST("tinkoff.public.invest.api.contract.v1.InstrumentsService/Shares")
+    suspend fun getShares(@Body body: InstrumentsRequest): InstrumentsListResponse
+
+    @POST("tinkoff.public.invest.api.contract.v1.InstrumentsService/Bonds")
+    suspend fun getBonds(@Body body: InstrumentsRequest): InstrumentsListResponse
+
+    @POST("tinkoff.public.invest.api.contract.v1.InstrumentsService/Etfs")
+    suspend fun getEtfs(@Body body: InstrumentsRequest): InstrumentsListResponse
 
     // ---- Market data (real quotes) ----
 
