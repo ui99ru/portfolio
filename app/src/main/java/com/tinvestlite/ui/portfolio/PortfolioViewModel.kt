@@ -9,6 +9,7 @@ import com.tinvestlite.data.local.TokenStore
 import com.tinvestlite.data.repository.AccountPortfolio
 import com.tinvestlite.data.repository.InvestRepository
 import com.tinvestlite.data.repository.OverviewItem
+import com.tinvestlite.data.repository.Quote
 import com.tinvestlite.util.InstrumentLogo
 import com.tinvestlite.util.toBigDecimal
 import com.tinvestlite.util.toDouble
@@ -159,7 +160,11 @@ class PortfolioViewModel(
                 .filter { it.instrumentType != "currency" && it.instrumentUid.isNotBlank() }
                 .map { it.instrumentUid }
         }.distinct()
-        val quotes = (repository.getQuotes(allUids) as? ApiResult.Success)?.data ?: emptyMap()
+        val quotes: Map<String, Quote> =
+            when (val r = repository.getQuotes(allUids)) {
+                is ApiResult.Success -> r.data
+                is ApiResult.Error -> emptyMap()
+            }
 
         val blocks = data.map { ap ->
             async {
