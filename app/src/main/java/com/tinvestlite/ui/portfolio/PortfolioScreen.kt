@@ -149,15 +149,65 @@ private fun ConsolidatedContent(
                 AccountCard(account, onSelectAccount)
             }
         } else {
-            // Single account → show its positions inline.
+            // Single account → show its positions inline, grouped.
             val only = data.accounts.first()
             if (only.rows.isEmpty()) {
                 item { EmptyHint(data.isReal) }
             } else {
-                items(only.rows, key = { it.uid }) { row ->
-                    PositionRow(row, onOpenInstrument)
-                }
+                groupedPositions(only.groups, onOpenInstrument)
             }
+        }
+    }
+}
+
+/** Renders frozen + liquid groups with headers and rouble subtotals. */
+private fun androidx.compose.foundation.lazy.LazyListScope.groupedPositions(
+    groups: GroupedPositions,
+    onOpenInstrument: (String) -> Unit,
+) {
+    groups.frozen?.let { frozen ->
+        item(key = "hdr-frozen") { GroupHeader(frozen.title, frozen.rubTotal) }
+        items(frozen.rows, key = { "fz-${it.uid}" }) { row ->
+            PositionRow(row, onOpenInstrument)
+        }
+    }
+    if (groups.liquid.isNotEmpty()) {
+        item(key = "hdr-liquid") {
+            Text(
+                "Ликвидные",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = 12.dp, bottom = 2.dp),
+            )
+        }
+        groups.liquid.forEach { group ->
+            item(key = "hdr-${group.title}") { GroupHeader(group.title, group.rubTotal) }
+            items(group.rows, key = { "lq-${it.uid}" }) { row ->
+                PositionRow(row, onOpenInstrument)
+            }
+        }
+    }
+}
+
+@Composable
+private fun GroupHeader(title: String, rubTotal: BigDecimal) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        // Rouble subtotal (RUB-priced positions only; see note in VM).
+        if (rubTotal.signum() != 0) {
+            Text(
+                MoneyFormat.amount(rubTotal, "rub"),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -186,9 +236,7 @@ private fun AccountDetailContent(
                 )
             }
         } else {
-            items(account.rows, key = { it.uid }) { row ->
-                PositionRow(row, onOpenInstrument)
-            }
+            groupedPositions(account.groups, onOpenInstrument)
         }
     }
 }

@@ -31,6 +31,29 @@ data class PortfolioRow(
     val value: BigDecimal,
     val yieldPercent: Double,
     val currency: String,
+    val instrumentType: String,
+    val frozen: Boolean,
+)
+
+/** Sub-group within the liquid (Russian) bucket. */
+enum class AssetGroup(val title: String) {
+    Shares("Акции"),
+    Bonds("Облигации"),
+    Etfs("Фонды"),
+    Other("Другие"),
+}
+
+/** A titled group of positions with a rouble subtotal. */
+data class PositionGroup(
+    val title: String,
+    val rubTotal: BigDecimal,
+    val rows: List<PortfolioRow>,
+)
+
+/** Positions split into frozen (foreign/FinEx/non-tradable FX) and liquid (RU). */
+data class GroupedPositions(
+    val frozen: PositionGroup?,
+    val liquid: List<PositionGroup>,
 )
 
 /** Which time period the change figures refer to. */
@@ -47,6 +70,7 @@ data class AccountBlock(
     val dayChange: BigDecimal,
     val dayPercent: Double,
     val rows: List<PortfolioRow>,
+    val groups: GroupedPositions,
 )
 
 sealed interface PortfolioUiState {
@@ -174,6 +198,8 @@ class PortfolioViewModel(
                         val info = resolveInfo(position.instrumentUid, position.figi, position.ticker)
                         val qty = position.quantity.toBigDecimal()
                         val value = position.currentPrice.toBigDecimal().multiply(qty)
+                        val currency = position.currentPrice.currency
+                            .ifBlank { position.currentPriceCurrency ?: "rub" }
                         PortfolioRow(
                             uid = position.instrumentUid,
                             name = info.name,
@@ -182,8 +208,9 @@ class PortfolioViewModel(
                             quantity = qty,
                             value = value,
                             yieldPercent = position.expectedYield.toDouble(),
-                            currency = position.currentPrice.currency
-                                .ifBlank { position.currentPriceCurrency ?: "rub" },
+                            currency = currency,
+                            instrumentType = position.instrumentType,
+                            frozen = isFrozen(info, currency),
                         )
                     }
                 }.awaitAll().sortedByDescending { it.value }
@@ -227,6 +254,7 @@ class PortfolioViewModel(
                     dayChange = dayChange,
                     dayPercent = pct(dayChange),
                     rows = rows,
+                    groups = buildGroups(rows),
                 )
             }
         }.awaitAll()
@@ -264,7 +292,13 @@ class PortfolioViewModel(
     }
 
     /** Resolved display info for a position, including the brand logo URL. */
-    private data class InstrumentInfo(val name: String, val ticker: String, val logoUrl: String?)
+    private data class InstrumentInfo(
+        val name: String,
+        val ticker: String,
+        val logoUrl: String?,
+        val countryOfRisk: String,
+        val apiTradeAvailable: Boolean,
+    )
 
     private suspend fun resolveInfo(uid: String, figi: String, ticker: String?): InstrumentInfo {
         val cacheKey = uid.ifBlank { figi }
@@ -278,12 +312,59 @@ class PortfolioViewModel(
                 ?.let { repository.getInstrumentByFigi(it).getOrNull() }
 
         val resolved = if (detail != null && detail.name.isNotBlank()) {
-            InstrumentInfo(detail.name, detail.ticker, InstrumentLogo.url(detail.brand))
+            InstrumentInfo(
+                name = detail.name,
+                ticker = detail.ticker,
+                logoUrl = InstrumentLogo.url(detail.brand),
+                countryOfRisk = detail.countryOfRisk,
+                apiTradeAvailable = detail.apiTradeAvailableFlag,
+            )
         } else {
             val fallback = ticker?.takeIf { it.isNotBlank() } ?: figi
-            InstrumentInfo(fallback, fallback, null)
+            InstrumentInfo(fallback, fallback, null, "", true)
         }
         infoCache[cacheKey] = resolved
         return resolved
+    }
+
+    /** Frozen = foreign (country ≠ RU), FinEx funds, or non-tradable in non-RUB. */
+    private fun isFrozen(info: InstrumentInfo, currency: String): Boolean {
+        val foreign = info.countryOfRisk.isNotBlank() && !info.countryOfRisk.equals("RU", ignoreCase = true)
+        val finex = info.ticker.startsWith("FX", ignoreCase = true) ||
+            info.name.contains("FinEx", ignoreCase = true)
+        val nonRub = !currency.equals("rub", ignoreCase = true)
+        val nonTradableForeign = !info.apiTradeAvailable && nonRub
+        return foreign || finex || nonTradableForeign
+    }
+
+    private fun groupOf(instrumentType: String): AssetGroup = when (instrumentType.lowercase()) {
+        "share" -> AssetGroup.Shares
+        "bond" -> AssetGroup.Bonds
+        "etf" -> AssetGroup.Etfs
+        else -> AssetGroup.Other
+    }
+
+    /** Build frozen + liquid (RU, sub-grouped) buckets; rouble subtotals. */
+    private fun buildGroups(rows: List<PortfolioRow>): GroupedPositions {
+        val frozenRows = rows.filter { it.frozen }
+        val liquidRows = rows.filterNot { it.frozen }
+
+        fun rubSum(list: List<PortfolioRow>): BigDecimal =
+            list.filter { it.currency.equals("rub", ignoreCase = true) }
+                .fold(BigDecimal.ZERO) { acc, r -> acc.add(r.value) }
+
+        val frozen = if (frozenRows.isEmpty()) {
+            null
+        } else {
+            PositionGroup("Замороженные", rubSum(frozenRows), frozenRows)
+        }
+
+        val liquid = AssetGroup.entries.mapNotNull { group ->
+            val groupRows = liquidRows.filter { groupOf(it.instrumentType) == group }
+            if (groupRows.isEmpty()) null
+            else PositionGroup(group.title, rubSum(groupRows), groupRows)
+        }
+
+        return GroupedPositions(frozen = frozen, liquid = liquid)
     }
 }
