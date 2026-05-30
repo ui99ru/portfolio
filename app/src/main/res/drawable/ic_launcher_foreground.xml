@@ -3,8 +3,8 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Stylized "T" mark on the brand yellow -->
+    <!-- Stylized "T" mark in brand silver -->
     <path
-        android:fillColor="#FFDD2D"
+        android:fillColor="#A8B2C2"
         android:pathData="M34,40 h40 v9 h-15.5 v28 h-9 v-28 h-15.5 z" />
 </vector>

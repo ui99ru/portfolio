@@ -187,14 +187,19 @@ private fun androidx.compose.foundation.lazy.LazyListScope.groupedPositions(
         if (!sectionCollapsed) {
             section.subgroups.forEach { sub ->
                 val subKey = "${section.key}/${sub.title}"
-                val subCollapsed = subKey in collapsed
-                item(key = "sub-$subKey") {
-                    SubgroupHeader(
-                        title = sub.title,
-                        rubTotal = sub.rubTotal,
-                        collapsed = subCollapsed,
-                        onClick = { onToggle(subKey) },
-                    )
+                // A subgroup header for a single asset just duplicates the row —
+                // skip it and show the row directly (always expanded).
+                val showHeader = sub.rows.size > 1
+                val subCollapsed = showHeader && subKey in collapsed
+                if (showHeader) {
+                    item(key = "sub-$subKey") {
+                        SubgroupHeader(
+                            title = sub.title,
+                            rubTotal = sub.rubTotal,
+                            collapsed = subCollapsed,
+                            onClick = { onToggle(subKey) },
+                        )
+                    }
                 }
                 if (!subCollapsed) {
                     items(sub.rows, key = { "$subKey-${it.uid}" }) { row ->
