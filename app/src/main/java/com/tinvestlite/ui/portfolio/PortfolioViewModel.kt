@@ -188,15 +188,23 @@ class PortfolioViewModel(
     private data class InstrumentInfo(val name: String, val ticker: String, val logoUrl: String?)
 
     private suspend fun resolveInfo(uid: String, figi: String, ticker: String?): InstrumentInfo {
-        infoCache[uid]?.let { return it }
-        val detail = repository.getInstrument(uid).getOrNull()
+        val cacheKey = uid.ifBlank { figi }
+        infoCache[cacheKey]?.let { return it }
+
+        // Real portfolios sometimes omit the UID; fall back to a FIGI lookup so
+        // we still get the human-readable name and logo.
+        val detail = uid.takeIf { it.isNotBlank() }
+            ?.let { repository.getInstrument(it).getOrNull() }
+            ?: figi.takeIf { it.isNotBlank() }
+                ?.let { repository.getInstrumentByFigi(it).getOrNull() }
+
         val resolved = if (detail != null && detail.name.isNotBlank()) {
             InstrumentInfo(detail.name, detail.ticker, InstrumentLogo.url(detail.brand))
         } else {
             val fallback = ticker?.takeIf { it.isNotBlank() } ?: figi
             InstrumentInfo(fallback, fallback, null)
         }
-        infoCache[uid] = resolved
+        infoCache[cacheKey] = resolved
         return resolved
     }
 }

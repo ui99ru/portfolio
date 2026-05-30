@@ -146,6 +146,13 @@ class InvestRepository(
         api.getInstrumentBy(InstrumentRequest(id = uid)).instrument
     }
 
+    /** Look up an instrument by FIGI — fallback when a position has no UID. */
+    suspend fun getInstrumentByFigi(figi: String): ApiResult<InstrumentDetail> = safeCall {
+        api.getInstrumentBy(
+            InstrumentRequest(idType = "INSTRUMENT_ID_TYPE_FIGI", id = figi),
+        ).instrument
+    }
+
     /** Tradable shares, tagged with instrumentType="share" and sorted by ticker. */
     suspend fun getShares(): ApiResult<List<InstrumentShort>> = safeCall {
         api.getShares(InstrumentsRequest()).instruments
