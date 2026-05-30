@@ -254,7 +254,7 @@ class PortfolioViewModel(
                     dayChange = dayChange,
                     dayPercent = pct(dayChange),
                     rows = rows,
-                    groups = buildGroups(rows),
+                    groups = buildGroups(rows, totalValue),
                 )
             }
         }.awaitAll()
@@ -344,8 +344,13 @@ class PortfolioViewModel(
         else -> AssetGroup.Other
     }
 
-    /** Build frozen + liquid (RU, sub-grouped) buckets; rouble subtotals. */
-    private fun buildGroups(rows: List<PortfolioRow>): GroupedPositions {
+    /**
+     * Build frozen + liquid (RU, sub-grouped) buckets with rouble subtotals.
+     * Liquid positions are RUB-priced, so their subtotals sum directly. The
+     * frozen subtotal is derived as (account total in RUB − liquid total),
+     * avoiding any FX conversion of foreign-currency positions.
+     */
+    private fun buildGroups(rows: List<PortfolioRow>, accountTotalRub: BigDecimal): GroupedPositions {
         val frozenRows = rows.filter { it.frozen }
         val liquidRows = rows.filterNot { it.frozen }
 
@@ -353,10 +358,14 @@ class PortfolioViewModel(
             list.filter { it.currency.equals("rub", ignoreCase = true) }
                 .fold(BigDecimal.ZERO) { acc, r -> acc.add(r.value) }
 
+        val liquidTotal = rubSum(liquidRows)
+
         val frozen = if (frozenRows.isEmpty()) {
             null
         } else {
-            PositionGroup("Замороженные", rubSum(frozenRows), frozenRows)
+            // Frozen value in RUB = whole account − liquid (never negative).
+            val frozenRub = accountTotalRub.subtract(liquidTotal).max(BigDecimal.ZERO)
+            PositionGroup("Замороженные", frozenRub, frozenRows)
         }
 
         val liquid = AssetGroup.entries.mapNotNull { group ->
