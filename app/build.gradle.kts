@@ -64,8 +64,14 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // Minification is intentionally OFF for now. This is a personal
+            // sandbox/sideload app where correctness beats a smaller APK:
+            // incomplete R8 keep-rules can strip reflection-based
+            // kotlinx.serialization and crash at runtime when parsing API
+            // responses. Re-enable with verified keep-rules before any Play
+            // distribution.
+            isMinifyEnabled = false
+            isShrinkResources = false
             signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
