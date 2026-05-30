@@ -116,6 +116,10 @@ private fun ConsolidatedContent(
     onOpenInstrument: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val collapsed = remember { mutableStateListOf<String>() }
+    val onToggle: (String) -> Unit = { key ->
+        if (key in collapsed) collapsed.remove(key) else collapsed.add(key)
+    }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -154,55 +158,102 @@ private fun ConsolidatedContent(
             if (only.rows.isEmpty()) {
                 item { EmptyHint(data.isReal) }
             } else {
-                groupedPositions(only.groups, onOpenInstrument)
+                groupedPositions(only.groups, collapsed.toSet(), onToggle, onOpenInstrument)
             }
         }
     }
 }
 
-/** Renders frozen + liquid groups with headers and rouble subtotals. */
+/** Renders collapsible sections (liquid → frozen) with subgroups and subtotals. */
 private fun androidx.compose.foundation.lazy.LazyListScope.groupedPositions(
     groups: GroupedPositions,
+    collapsed: Set<String>,
+    onToggle: (String) -> Unit,
     onOpenInstrument: (String) -> Unit,
 ) {
-    groups.frozen?.let { frozen ->
-        item(key = "hdr-frozen") { GroupHeader(frozen.title, frozen.rubTotal) }
-        items(frozen.rows, key = { "fz-${it.uid}" }) { row ->
-            PositionRow(row, onOpenInstrument)
-        }
-    }
-    if (groups.liquid.isNotEmpty()) {
-        item(key = "hdr-liquid") {
-            Text(
-                "Ликвидные",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(top = 12.dp, bottom = 2.dp),
+    groups.sections.forEach { section ->
+        val sectionCollapsed = section.key in collapsed
+        item(key = "sec-${section.key}") {
+            SectionHeader(
+                title = section.title,
+                rubTotal = section.rubTotal,
+                collapsed = sectionCollapsed,
+                onClick = { onToggle(section.key) },
             )
         }
-        groups.liquid.forEach { group ->
-            item(key = "hdr-${group.title}") { GroupHeader(group.title, group.rubTotal) }
-            items(group.rows, key = { "lq-${it.uid}" }) { row ->
-                PositionRow(row, onOpenInstrument)
+        if (!sectionCollapsed) {
+            section.subgroups.forEach { sub ->
+                val subKey = "${section.key}/${sub.title}"
+                val subCollapsed = subKey in collapsed
+                item(key = "sub-$subKey") {
+                    SubgroupHeader(
+                        title = sub.title,
+                        rubTotal = sub.rubTotal,
+                        collapsed = subCollapsed,
+                        onClick = { onToggle(subKey) },
+                    )
+                }
+                if (!subCollapsed) {
+                    items(sub.rows, key = { "$subKey-${it.uid}" }) { row ->
+                        PositionRow(row, onOpenInstrument)
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun GroupHeader(title: String, rubTotal: BigDecimal) {
+private fun SectionHeader(title: String, rubTotal: BigDecimal, collapsed: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(top = 14.dp, bottom = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            title,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        // Rouble subtotal (RUB-priced positions only; see note in VM).
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Icon(
+                imageVector = if (collapsed) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        }
         if (rubTotal.signum() != 0) {
+            Text(
+                MoneyFormat.amount(rubTotal, "rub"),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SubgroupHeader(title: String, rubTotal: BigDecimal?, collapsed: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(start = 8.dp, top = 6.dp, bottom = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Icon(
+                imageVector = if (collapsed) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                title,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (rubTotal != null && rubTotal.signum() != 0) {
             Text(
                 MoneyFormat.amount(rubTotal, "rub"),
                 style = MaterialTheme.typography.labelMedium,
@@ -220,6 +271,10 @@ private fun AccountDetailContent(
     onOpenInstrument: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val collapsed = remember { mutableStateListOf<String>() }
+    val onToggle: (String) -> Unit = { key ->
+        if (key in collapsed) collapsed.remove(key) else collapsed.add(key)
+    }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -236,7 +291,7 @@ private fun AccountDetailContent(
                 )
             }
         } else {
-            groupedPositions(account.groups, onOpenInstrument)
+            groupedPositions(account.groups, collapsed.toSet(), onToggle, onOpenInstrument)
         }
     }
 }
@@ -247,17 +302,38 @@ private fun changeText(money: BigDecimal, percent: Double, currency: String): St
     return "$sign${MoneyFormat.amount(money, currency)} · ${MoneyFormat.percent(percent)}"
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** Clean two-option pill toggle (replaces the bulky SegmentedButton). */
 @Composable
 private fun PeriodToggle(period: Period, onSetPeriod: (Period) -> Unit) {
-    SingleChoiceSegmentedButtonRow {
-        Period.entries.forEachIndexed { index, p ->
-            SegmentedButton(
-                selected = period == p,
-                onClick = { onSetPeriod(p) },
-                shape = SegmentedButtonDefaults.itemShape(index, Period.entries.size),
-                icon = {},
-            ) { Text(p.label) }
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Period.entries.forEach { p ->
+            val selected = p == period
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(
+                        if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                    )
+                    .clickable { onSetPeriod(p) }
+                    .padding(horizontal = 18.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    p.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.onPrimary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
         }
     }
 }

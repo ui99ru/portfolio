@@ -43,17 +43,24 @@ enum class AssetGroup(val title: String) {
     Other("Другие"),
 }
 
-/** A titled group of positions with a rouble subtotal. */
-data class PositionGroup(
+/** A titled subgroup of positions; rubTotal is null when not computable (FX). */
+data class PositionSubgroup(
     val title: String,
-    val rubTotal: BigDecimal,
+    val rubTotal: BigDecimal?,
     val rows: List<PortfolioRow>,
 )
 
-/** Positions split into frozen (foreign/FinEx/non-tradable FX) and liquid (RU). */
+/** A top-level collapsible section ("Ликвидные"/"Замороженные"). */
+data class PositionSection(
+    val key: String,
+    val title: String,
+    val rubTotal: BigDecimal,
+    val subgroups: List<PositionSubgroup>,
+)
+
+/** Ordered sections: liquid first, then frozen. Empty ones are omitted. */
 data class GroupedPositions(
-    val frozen: PositionGroup?,
-    val liquid: List<PositionGroup>,
+    val sections: List<PositionSection>,
 )
 
 /** Which time period the change figures refer to. */
@@ -348,11 +355,15 @@ class PortfolioViewModel(
         else -> AssetGroup.Other
     }
 
+    /** FinEx fund detection (separated from other foreign assets). */
+    private fun isFinex(row: PortfolioRow): Boolean =
+        row.ticker.startsWith("FX", ignoreCase = true) || row.name.contains("FinEx", ignoreCase = true)
+
     /**
-     * Build frozen + liquid (RU, sub-grouped) buckets with rouble subtotals.
-     * Liquid positions are RUB-priced, so their subtotals sum directly. The
-     * frozen subtotal is derived as (account total in RUB − liquid total),
-     * avoiding any FX conversion of foreign-currency positions.
+     * Build liquid + frozen sections (liquid first). Liquid is RUB-priced, so
+     * subtotals sum directly. Frozen section total is derived as
+     * (account total − liquid − cash) to avoid FX conversion; its subgroups
+     * (FinEx funds vs foreign, kept separate) show no rouble subtotal.
      */
     private fun buildGroups(
         rows: List<PortfolioRow>,
@@ -366,23 +377,45 @@ class PortfolioViewModel(
             list.filter { it.currency.equals("rub", ignoreCase = true) }
                 .fold(BigDecimal.ZERO) { acc, r -> acc.add(r.value) }
 
-        val liquidTotal = rubSum(liquidRows)
+        val sections = mutableListOf<PositionSection>()
 
-        val frozen = if (frozenRows.isEmpty()) {
-            null
-        } else {
-            // Frozen value in RUB = account total − liquid − free cash
-            // (cash is RUB). Avoids any FX; never negative.
-            val frozenRub = accountTotalRub.subtract(liquidTotal).subtract(cashRub).max(BigDecimal.ZERO)
-            PositionGroup("Замороженные", frozenRub, frozenRows)
+        // ---- Liquid (Russian), sub-grouped by asset type ----
+        if (liquidRows.isNotEmpty()) {
+            val liquidSubs = AssetGroup.entries.mapNotNull { group ->
+                val groupRows = liquidRows.filter { groupOf(it.instrumentType) == group }
+                if (groupRows.isEmpty()) null
+                else PositionSubgroup(group.title, rubSum(groupRows), groupRows)
+            }
+            sections += PositionSection(
+                key = "liquid",
+                title = "Ликвидные",
+                rubTotal = rubSum(liquidRows),
+                subgroups = liquidSubs,
+            )
         }
 
-        val liquid = AssetGroup.entries.mapNotNull { group ->
-            val groupRows = liquidRows.filter { groupOf(it.instrumentType) == group }
-            if (groupRows.isEmpty()) null
-            else PositionGroup(group.title, rubSum(groupRows), groupRows)
+        // ---- Frozen: FinEx funds kept separate from foreign assets ----
+        if (frozenRows.isNotEmpty()) {
+            val finexRows = frozenRows.filter { isFinex(it) }
+            val foreignRows = frozenRows.filterNot { isFinex(it) }
+            val frozenSubs = buildList {
+                if (foreignRows.isNotEmpty()) {
+                    AssetGroup.entries.forEach { group ->
+                        val gr = foreignRows.filter { groupOf(it.instrumentType) == group }
+                        if (gr.isNotEmpty()) add(PositionSubgroup(group.title, null, gr))
+                    }
+                }
+                if (finexRows.isNotEmpty()) add(PositionSubgroup("Фонды FinEx", null, finexRows))
+            }
+            val frozenRub = accountTotalRub.subtract(rubSum(liquidRows)).subtract(cashRub).max(BigDecimal.ZERO)
+            sections += PositionSection(
+                key = "frozen",
+                title = "Замороженные",
+                rubTotal = frozenRub,
+                subgroups = frozenSubs,
+            )
         }
 
-        return GroupedPositions(frozen = frozen, liquid = liquid)
+        return GroupedPositions(sections = sections)
     }
 }
