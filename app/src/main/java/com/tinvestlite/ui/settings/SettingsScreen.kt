@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -48,7 +49,10 @@ fun SettingsScreen(container: AppContainer) {
     )
     val state by vm.state.collectAsStateWithLifecycle()
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Настройки") }) }) { padding ->
+    Scaffold(
+        contentWindowInsets = WindowInsets(0),
+        topBar = { TopAppBar(windowInsets = WindowInsets(0), title = { Text("Настройки") }) },
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()

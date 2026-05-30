@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -63,8 +64,12 @@ fun PortfolioScreen(
     val drilledIn = data?.isConsolidated == false
 
     Scaffold(
+        // Nested inside HomeScreen's Scaffold, which already applies the system
+        // bar insets — zero them here to avoid doubled top/bottom padding.
+        contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets(0),
                 title = { Text(if (drilledIn) data?.selectedAccount?.title ?: "Счёт" else "Портфель") },
                 navigationIcon = {
                     if (drilledIn) {
