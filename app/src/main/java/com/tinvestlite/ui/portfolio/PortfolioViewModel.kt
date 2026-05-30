@@ -8,6 +8,7 @@ import com.tinvestlite.data.getOrNull
 import com.tinvestlite.data.local.TokenStore
 import com.tinvestlite.data.repository.AccountPortfolio
 import com.tinvestlite.data.repository.InvestRepository
+import com.tinvestlite.util.InstrumentLogo
 import com.tinvestlite.util.toBigDecimal
 import com.tinvestlite.util.toDouble
 import kotlinx.coroutines.async
@@ -23,6 +24,7 @@ data class PortfolioRow(
     val uid: String,
     val name: String,
     val ticker: String,
+    val logoUrl: String?,
     val quantity: BigDecimal,
     val value: BigDecimal,
     val yieldPercent: Double,
@@ -68,7 +70,7 @@ class PortfolioViewModel(
     private val _state = MutableStateFlow<PortfolioUiState>(PortfolioUiState.Loading)
     val state: StateFlow<PortfolioUiState> = _state.asStateFlow()
 
-    private val nameCache = mutableMapOf<String, Pair<String, String>>()
+    private val infoCache = mutableMapOf<String, InstrumentInfo>()
 
     init {
         // Reload whenever the mode (sandbox/real) changes.
@@ -122,14 +124,14 @@ class PortfolioViewModel(
                     .filter { it.instrumentType != "currency" }
                     .map { position ->
                         async {
-                            val (name, ticker) =
-                                resolveName(position.instrumentUid, position.figi, position.ticker)
+                            val info = resolveInfo(position.instrumentUid, position.figi, position.ticker)
                             val qty = position.quantity.toBigDecimal()
                             val value = position.currentPrice.toBigDecimal().multiply(qty)
                             PortfolioRow(
                                 uid = position.instrumentUid,
-                                name = name,
-                                ticker = ticker,
+                                name = info.name,
+                                ticker = info.ticker,
+                                logoUrl = info.logoUrl,
                                 quantity = qty,
                                 value = value,
                                 yieldPercent = position.expectedYield.toDouble(),
@@ -182,16 +184,19 @@ class PortfolioViewModel(
         }
     }
 
-    private suspend fun resolveName(uid: String, figi: String, ticker: String?): Pair<String, String> {
-        if (!ticker.isNullOrBlank()) return (ticker to ticker)
-        nameCache[uid]?.let { return it }
+    /** Resolved display info for a position, including the brand logo URL. */
+    private data class InstrumentInfo(val name: String, val ticker: String, val logoUrl: String?)
+
+    private suspend fun resolveInfo(uid: String, figi: String, ticker: String?): InstrumentInfo {
+        infoCache[uid]?.let { return it }
         val detail = repository.getInstrument(uid).getOrNull()
         val resolved = if (detail != null && detail.name.isNotBlank()) {
-            detail.name to detail.ticker
+            InstrumentInfo(detail.name, detail.ticker, InstrumentLogo.url(detail.brand))
         } else {
-            (figi to figi)
+            val fallback = ticker?.takeIf { it.isNotBlank() } ?: figi
+            InstrumentInfo(fallback, fallback, null)
         }
-        nameCache[uid] = resolved
+        infoCache[uid] = resolved
         return resolved
     }
 }

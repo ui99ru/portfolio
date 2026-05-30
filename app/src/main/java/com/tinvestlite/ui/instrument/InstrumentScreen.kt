@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -30,10 +31,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.tinvestlite.di.AppContainer
 import com.tinvestlite.ui.common.ErrorBox
+import com.tinvestlite.ui.common.InstrumentIcon
 import com.tinvestlite.ui.common.LoadingBox
 import com.tinvestlite.ui.common.vmFactory
 import com.tinvestlite.ui.theme.LossRed
 import com.tinvestlite.ui.theme.ProfitGreen
+import com.tinvestlite.util.InstrumentLogo
 import com.tinvestlite.util.MoneyFormat
 import java.math.BigDecimal
 
@@ -127,16 +130,28 @@ fun InstrumentScreen(
 
 @Composable
 private fun PriceHeader(state: InstrumentUiState) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        state.detail?.name?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        state.detail?.let { detail ->
+            InstrumentIcon(
+                logoUrl = InstrumentLogo.url(detail.brand),
+                fallbackText = detail.ticker.ifBlank { detail.name },
+                size = 48,
+            )
         }
-        Text(
-            text = state.lastPrice?.let { MoneyFormat.price(it) + " " + MoneyFormat.currencySymbol(state.detail?.currency.orEmpty()) }
-                ?: "—",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            state.detail?.name?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(
+                text = state.lastPrice?.let { MoneyFormat.price(it) + " " + MoneyFormat.currencySymbol(state.detail?.currency.orEmpty()) }
+                    ?: "—",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+        }
     }
 }
 

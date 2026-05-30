@@ -36,6 +36,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.tinvestlite.di.AppContainer
 import com.tinvestlite.ui.common.ErrorBox
+import com.tinvestlite.ui.common.InstrumentIcon
 import com.tinvestlite.ui.common.LoadingBox
 import com.tinvestlite.ui.common.changeColor
 import com.tinvestlite.ui.common.vmFactory
@@ -296,7 +297,12 @@ private fun PositionRow(row: PortfolioRow, onOpenInstrument: (String) -> Unit) {
             .clickable(enabled = row.uid.isNotBlank()) { onOpenInstrument(row.uid) }
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        InstrumentIcon(
+            logoUrl = row.logoUrl,
+            fallbackText = row.ticker.ifBlank { row.name },
+        )
         Column(Modifier.weight(1f)) {
             Text(
                 text = row.ticker.ifBlank { row.name },

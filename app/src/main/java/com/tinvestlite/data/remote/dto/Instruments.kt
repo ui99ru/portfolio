@@ -2,6 +2,14 @@ package com.tinvestlite.data.remote.dto
 
 import kotlinx.serialization.Serializable
 
+/** Brand block carrying the instrument logo file name (T-Invest CDN). */
+@Serializable
+data class Brand(
+    val logoName: String = "",
+    val logoBaseColor: String = "",
+    val textColor: String = "",
+)
+
 @Serializable
 data class FindInstrumentRequest(
     val query: String,
@@ -26,6 +34,9 @@ data class InstrumentShort(
     val lot: Int = 1,
     val apiTradeAvailableFlag: Boolean = false,
     val currency: String = "",
+    val countryOfRisk: String = "",
+    val forQualInvestorFlag: Boolean = false,
+    val brand: Brand = Brand(),
 )
 
 /** Request for the Shares/Bonds/Etfs catalog endpoints. */
@@ -68,4 +79,6 @@ data class InstrumentDetail(
     val minPriceIncrement: Quotation = Quotation(),
     val tradingStatus: String = "",
     val apiTradeAvailableFlag: Boolean = false,
+    val countryOfRisk: String = "",
+    val brand: Brand = Brand(),
 )

@@ -132,4 +132,5 @@ dependencies {
 
     implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.coil.compose)
 }

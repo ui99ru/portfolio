@@ -22,15 +22,16 @@ enum class MarketCategory(val label: String) {
 }
 
 /**
- * Tickers of the most liquid Russian blue chips. The API has no dedicated
- * "blue chips" endpoint, so we curate this set and filter it out of the full
- * share list. Mirrors the Moscow Exchange blue-chip index constituents.
+ * Blue chips = constituents of the MOEX Index (iMOEX). The API has no dedicated
+ * endpoint, so we curate the index tickers and filter them out of the full
+ * Russian share list. Keep in sync with the official iMOEX basket.
  */
-private val BLUE_CHIP_TICKERS = setOf(
-    "SBER", "SBERP", "GAZP", "LKOH", "GMKN", "ROSN", "NVTK", "TATN", "TATNP",
-    "SNGS", "SNGSP", "PLZL", "YDEX", "MGNT", "MTSS", "NLMK", "CHMF", "ALROSA",
-    "ALRS", "MOEX", "VTBR", "PHOR", "POLY", "RUAL", "AFLT", "FIVE", "OZON",
-    "TCSG", "T", "MAGN", "IRAO", "SIBN", "TRNFP", "AFKS", "HYDR", "FEES",
+private val IMOEX_TICKERS = setOf(
+    "ALRS", "AFLT", "AFKS", "CHMF", "ENPG", "FEES", "GAZP", "GMKN", "HYDR",
+    "IRAO", "LKOH", "MGNT", "MOEX", "MTSS", "NLMK", "NVTK", "PHOR", "PLZL",
+    "ROSN", "RTKM", "RUAL", "SBER", "SBERP", "SGZH", "SNGS", "SNGSP", "TATN",
+    "TATNP", "TRNFP", "VTBR", "YDEX", "T", "SIBN", "MAGN", "POSI", "UPRO",
+    "BSPB", "SVCB", "MTLR",
 )
 
 data class MarketUiState(
@@ -78,7 +79,11 @@ class MarketViewModel(
             when (val result = repository.findInstruments(query.trim())) {
                 is ApiResult.Success -> _state.value = _state.value.copy(
                     isLoading = false,
-                    results = result.data.distinctBy { it.uid }.take(50),
+                    // Russian market only for now — exclude foreign assets.
+                    results = result.data
+                        .filter { isRussian(it) }
+                        .distinctBy { it.uid }
+                        .take(50),
                 )
                 is ApiResult.Error -> _state.value = _state.value.copy(
                     isLoading = false,
@@ -121,10 +126,26 @@ class MarketViewModel(
     private fun applyCategoryFilter(
         category: MarketCategory,
         items: List<InstrumentShort>,
-    ): List<InstrumentShort> = when (category) {
-        MarketCategory.BlueChips -> items.filter { it.ticker in BLUE_CHIP_TICKERS }
-        MarketCategory.Ofz -> items.filter { isOfz(it) }
-        else -> items
+    ): List<InstrumentShort> {
+        // Russian market only for now (foreign assets are deferred).
+        val russian = items.filter { isRussian(it) }
+        return when (category) {
+            MarketCategory.BlueChips -> russian.filter { it.ticker in IMOEX_TICKERS }
+            MarketCategory.Ofz -> russian.filter { isOfz(it) }
+            else -> russian
+        }
+    }
+
+    /**
+     * Russian-market instrument. Prefer the explicit country of risk; when the
+     * API omits it, fall back to a RUB-denominated MOEX board (TQ* class codes).
+     */
+    private fun isRussian(item: InstrumentShort): Boolean {
+        if (item.countryOfRisk.isNotBlank()) {
+            return item.countryOfRisk.equals("RU", ignoreCase = true)
+        }
+        val moexBoard = item.classCode.startsWith("TQ", ignoreCase = true)
+        return moexBoard || item.currency.equals("rub", ignoreCase = true)
     }
 
     /** OFZ — federal loan bonds; identified by the "SU" ticker prefix or the name. */

@@ -35,7 +35,9 @@ import com.tinvestlite.data.remote.dto.InstrumentShort
 import com.tinvestlite.di.AppContainer
 import com.tinvestlite.ui.common.EmptyBox
 import com.tinvestlite.ui.common.ErrorBox
+import com.tinvestlite.ui.common.InstrumentIcon
 import com.tinvestlite.ui.common.vmFactory
+import com.tinvestlite.util.InstrumentLogo
 
 @Composable
 fun MarketScreen(
@@ -112,6 +114,10 @@ private fun InstrumentRow(item: InstrumentShort, onOpenInstrument: (String) -> U
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            InstrumentIcon(
+                logoUrl = InstrumentLogo.url(item.brand),
+                fallbackText = item.ticker.ifBlank { item.name },
+            )
             Column(Modifier.weight(1f)) {
                 Text(
                     text = item.ticker.ifBlank { item.name },
