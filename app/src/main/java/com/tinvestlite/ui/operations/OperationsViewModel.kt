@@ -27,7 +27,13 @@ class OperationsViewModel(
     private val _state = MutableStateFlow<OperationsUiState>(OperationsUiState.Loading)
     val state: StateFlow<OperationsUiState> = _state.asStateFlow()
 
-    init { refresh() }
+    init {
+        // Reload whenever the mode (sandbox/real) changes so operations always
+        // match the active account.
+        viewModelScope.launch {
+            tokenStore.mode.collect { refresh() }
+        }
+    }
 
     fun refresh() {
         _state.value = OperationsUiState.Loading
