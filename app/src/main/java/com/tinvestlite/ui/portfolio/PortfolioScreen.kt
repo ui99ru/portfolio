@@ -304,20 +304,20 @@ private fun PositionRow(row: PortfolioRow, onOpenInstrument: (String) -> Unit) {
             fallbackText = row.ticker.ifBlank { row.name },
         )
         Column(Modifier.weight(1f)) {
+            // Name on top, ticker below (matches the official app and Market).
             Text(
-                text = row.ticker.ifBlank { row.name },
+                text = row.name.ifBlank { row.ticker },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = row.name,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
             )
             Text(
-                text = "${MoneyFormat.price(row.quantity)} шт.",
-                style = MaterialTheme.typography.labelMedium,
+                text = if (row.ticker.isNotBlank()) {
+                    "${row.ticker} · ${MoneyFormat.price(row.quantity)} шт."
+                } else {
+                    "${MoneyFormat.price(row.quantity)} шт."
+                },
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

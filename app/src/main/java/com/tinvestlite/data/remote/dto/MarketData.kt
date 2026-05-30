@@ -45,6 +45,29 @@ data class LastPrice(
 )
 
 @Serializable
+data class GetClosePricesRequest(
+    val instruments: List<ClosePriceInstrument> = emptyList(),
+)
+
+@Serializable
+data class ClosePriceInstrument(
+    val instrumentId: String,
+)
+
+@Serializable
+data class GetClosePricesResponse(
+    val closePrices: List<InstrumentClosePrice> = emptyList(),
+)
+
+@Serializable
+data class InstrumentClosePrice(
+    val figi: String = "",
+    val instrumentUid: String = "",
+    val price: Quotation = Quotation(),
+    val eveningSessionPrice: Quotation = Quotation(),
+)
+
+@Serializable
 data class GetOrderBookRequest(
     val instrumentId: String,
     val depth: Int = 10,

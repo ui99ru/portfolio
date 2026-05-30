@@ -118,6 +118,9 @@ interface TInvestApi {
     @POST("tinkoff.public.invest.api.contract.v1.MarketDataService/GetLastPrices")
     suspend fun getLastPrices(@Body body: GetLastPricesRequest): GetLastPricesResponse
 
+    @POST("tinkoff.public.invest.api.contract.v1.MarketDataService/GetClosePrices")
+    suspend fun getClosePrices(@Body body: GetClosePricesRequest): GetClosePricesResponse
+
     @POST("tinkoff.public.invest.api.contract.v1.MarketDataService/GetOrderBook")
     suspend fun getOrderBook(@Body body: GetOrderBookRequest): GetOrderBookResponse
 }

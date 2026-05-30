@@ -22,6 +22,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,13 +33,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.tinvestlite.data.remote.dto.InstrumentShort
 import com.tinvestlite.di.AppContainer
 import com.tinvestlite.ui.common.EmptyBox
 import com.tinvestlite.ui.common.ErrorBox
 import com.tinvestlite.ui.common.InstrumentIcon
+import com.tinvestlite.ui.common.changeColor
 import com.tinvestlite.ui.common.vmFactory
 import com.tinvestlite.util.InstrumentLogo
+import com.tinvestlite.util.MoneyFormat
 
 @Composable
 fun MarketScreen(
@@ -64,21 +67,34 @@ fun MarketScreen(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         )
 
-        // Category chips — hidden while searching, since search spans all types.
         if (!state.isSearching) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                MarketCategory.entries.forEach { category ->
-                    FilterChip(
-                        selected = state.category == category,
-                        onClick = { vm.selectCategory(category) },
-                        label = { Text(category.label) },
+            // Macro sections as tabs.
+            TabRow(selectedTabIndex = state.section.ordinal) {
+                MarketSection.entries.forEach { section ->
+                    Tab(
+                        selected = state.section == section,
+                        onClick = { vm.selectSection(section) },
+                        text = { Text(section.label) },
                     )
+                }
+            }
+
+            // Sub-section chips (hidden when the section has none, e.g. ETFs).
+            if (state.subSections.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    state.subSections.forEach { sub ->
+                        FilterChip(
+                            selected = state.sub == sub,
+                            onClick = { vm.selectSub(sub) },
+                            label = { Text(sub.label) },
+                        )
+                    }
                 }
             }
         }
@@ -89,12 +105,12 @@ fun MarketScreen(
 
         when {
             state.error != null -> ErrorBox(state.error!!, Modifier.fillMaxSize(), onRetry = vm::retry)
-            state.isSearching && state.results.isEmpty() && !state.isLoading ->
+            state.isSearching && state.items.isEmpty() && !state.isLoading ->
                 EmptyBox("Ничего не найдено по запросу «${state.query}».")
-            !state.isSearching && state.results.isEmpty() && !state.isLoading ->
-                EmptyBox("В разделе «${state.category.label}» пока нет инструментов.")
+            !state.isSearching && state.items.isEmpty() && !state.isLoading ->
+                EmptyBox("В этом разделе пока нет инструментов.")
             else -> LazyColumn(Modifier.fillMaxSize()) {
-                items(state.results, key = { it.uid }) { item ->
+                items(state.items, key = { it.instrument.uid }) { item ->
                     InstrumentRow(item, onOpenInstrument)
                     HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
                 }
@@ -104,47 +120,53 @@ fun MarketScreen(
 }
 
 @Composable
-private fun InstrumentRow(item: InstrumentShort, onOpenInstrument: (String) -> Unit) {
+private fun InstrumentRow(item: MarketItem, onOpenInstrument: (String) -> Unit) {
+    val instrument = item.instrument
     Surface(color = MaterialTheme.colorScheme.background) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(enabled = item.uid.isNotBlank()) { onOpenInstrument(item.uid) }
+                .clickable(enabled = instrument.uid.isNotBlank()) { onOpenInstrument(instrument.uid) }
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             InstrumentIcon(
-                logoUrl = InstrumentLogo.url(item.brand),
-                fallbackText = item.ticker.ifBlank { item.name },
+                logoUrl = InstrumentLogo.url(instrument.brand),
+                fallbackText = instrument.ticker.ifBlank { instrument.name },
             )
+            // Name on top, ticker below (matches the official app).
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = item.ticker.ifBlank { item.name },
+                    text = instrument.name.ifBlank { instrument.ticker },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = item.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
+                Text(
+                    text = instrument.ticker,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            Text(
-                text = instrumentTypeLabel(item.instrumentType),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // Quote: last price + day change.
+            val quote = item.quote
+            if (quote != null) {
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = MoneyFormat.amount(
+                            java.math.BigDecimal.valueOf(quote.lastPrice),
+                            instrument.currency,
+                        ),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = MoneyFormat.percent(quote.dayChangePercent),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = changeColor(quote.dayChangePercent),
+                    )
+                }
+            }
         }
     }
-}
-
-private fun instrumentTypeLabel(type: String): String = when (type.lowercase()) {
-    "share" -> "Акция"
-    "bond" -> "Облигация"
-    "etf" -> "Фонд"
-    "currency" -> "Валюта"
-    "futures" -> "Фьючерс"
-    else -> type
 }

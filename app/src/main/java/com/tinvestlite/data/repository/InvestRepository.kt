@@ -7,7 +7,9 @@ import com.tinvestlite.data.remote.NetworkModule
 import com.tinvestlite.data.remote.TInvestApi
 import com.tinvestlite.data.remote.dto.Account
 import com.tinvestlite.data.remote.dto.CancelOrderRequest
+import com.tinvestlite.data.remote.dto.ClosePriceInstrument
 import com.tinvestlite.data.remote.dto.FindInstrumentRequest
+import com.tinvestlite.data.remote.dto.GetClosePricesRequest
 import com.tinvestlite.data.remote.dto.GetAccountsRequest
 import com.tinvestlite.data.remote.dto.GetCandlesRequest
 import com.tinvestlite.data.remote.dto.GetLastPricesRequest
@@ -198,6 +200,38 @@ class InvestRepository(
             .lastPrices.firstOrNull()?.price ?: Quotation()
     }
 
+    /**
+     * Batch quotes (last price + day change %) for a list of instrument UIDs.
+     * Combines GetLastPrices with GetClosePrices (previous close) so the UI can
+     * show the daily change. Missing entries simply don't appear in the map.
+     */
+    suspend fun getQuotes(uids: List<String>): ApiResult<Map<String, Quote>> = safeCall {
+        if (uids.isEmpty()) return@safeCall emptyMap()
+        coroutineScope {
+            val lastDeferred = async {
+                api.getLastPrices(GetLastPricesRequest(instrumentId = uids)).lastPrices
+            }
+            val closeDeferred = async {
+                api.getClosePrices(
+                    GetClosePricesRequest(instruments = uids.map { ClosePriceInstrument(it) }),
+                ).closePrices
+            }
+            val last = lastDeferred.await().associateBy { it.instrumentUid }
+            val close = closeDeferred.await().associateBy { it.instrumentUid }
+
+            uids.mapNotNull { uid ->
+                val lastPrice = last[uid]?.price?.toDoubleOrZero() ?: return@mapNotNull null
+                val prevClose = close[uid]?.price?.toDoubleOrZero() ?: 0.0
+                val changePercent = if (prevClose > 0.0) {
+                    (lastPrice - prevClose) / prevClose * 100.0
+                } else {
+                    0.0
+                }
+                uid to Quote(lastPrice = lastPrice, dayChangePercent = changePercent)
+            }.toMap()
+        }
+    }
+
     // ---- Orders (sandbox only — real mode is read-only) ----
 
     suspend fun postOrder(
@@ -280,3 +314,11 @@ data class AccountPortfolio(
     val account: Account,
     val portfolio: PortfolioResponse,
 )
+
+/** Current price and day change, used to show quotes in lists. */
+data class Quote(
+    val lastPrice: Double,
+    val dayChangePercent: Double,
+)
+
+private fun Quotation.toDoubleOrZero(): Double = units + nano / 1_000_000_000.0
