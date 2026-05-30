@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -20,6 +21,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
@@ -60,7 +62,7 @@ fun InstrumentScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     val mode by container.tokenStore.mode.collectAsStateWithLifecycle()
     val tradingEnabled = !mode.isReal
-    var chartType by rememberSaveable { mutableStateOf(ChartType.Candles) }
+    var chartType by rememberSaveable { mutableStateOf(ChartType.Line) }
     val title = state.detail?.let { it.ticker.ifBlank { it.name } } ?: "Инструмент"
 
     Scaffold(
@@ -76,29 +78,39 @@ fun InstrumentScreen(
         },
         bottomBar = {
             if (state.detail != null) {
-                if (tradingEnabled) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Button(
-                            onClick = { onTrade(true) },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = ProfitGreen),
-                        ) { Text("Купить", color = MaterialTheme.colorScheme.onPrimary) }
-                        Button(
-                            onClick = { onTrade(false) },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = LossRed),
-                        ) { Text("Продать", color = MaterialTheme.colorScheme.onPrimary) }
+                // Surface + navigationBarsPadding keeps the buttons above the
+                // system gesture/navigation bar instead of overlapping it.
+                Surface(color = MaterialTheme.colorScheme.background) {
+                    if (tradingEnabled) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Button(
+                                onClick = { onTrade(true) },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = ProfitGreen),
+                            ) { Text("Купить", color = MaterialTheme.colorScheme.onPrimary) }
+                            Button(
+                                onClick = { onTrade(false) },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = LossRed),
+                            ) { Text("Продать", color = MaterialTheme.colorScheme.onPrimary) }
+                        }
+                    } else {
+                        Text(
+                            text = "Реальный счёт — только просмотр. Торговля доступна в режиме песочницы.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .padding(16.dp),
+                        )
                     }
-                } else {
-                    Text(
-                        text = "Реальный счёт — только просмотр. Торговля доступна в режиме песочницы.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    )
                 }
             }
         },
