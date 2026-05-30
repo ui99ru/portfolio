@@ -27,7 +27,10 @@ data class TradeUiState(
     val resultMessage: String? = null,
     val isSuccess: Boolean = false,
     val error: String? = null,
-)
+) {
+    /** Whether the instrument can be traded via the API (sandbox included). */
+    val tradable: Boolean get() = detail?.apiTradeAvailableFlag ?: true
+}
 
 class TradeViewModel(
     private val repository: InvestRepository,
@@ -75,6 +78,13 @@ class TradeViewModel(
 
     fun submit() {
         val s = _state.value
+        if (!s.tradable) {
+            _state.value = s.copy(
+                error = "Этот инструмент недоступен для торговли через API " +
+                    "(в песочнице доступны не все бумаги).",
+            )
+            return
+        }
         val accountId = tokenStore.accountId(tokenStore.mode.value)
         if (accountId == null) {
             _state.value = s.copy(error = "Нет активного счёта")

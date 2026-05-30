@@ -159,6 +159,16 @@ fun TradeScreen(
             )
         }
 
+        if (!state.tradable) {
+            Text(
+                text = "Этот инструмент недоступен для торговли через API. " +
+                    "В песочнице доступны не все бумаги — попробуй, например, " +
+                    "ликвидные акции (SBER, GAZP).",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+
         state.error?.let {
             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
         }
@@ -173,7 +183,7 @@ fun TradeScreen(
         } else {
             Button(
                 onClick = vm::submit,
-                enabled = !state.isSubmitting,
+                enabled = !state.isSubmitting && state.tradable,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (state.isBuy) ProfitGreen else LossRed,

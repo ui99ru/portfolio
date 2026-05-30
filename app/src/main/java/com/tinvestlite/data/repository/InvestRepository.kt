@@ -304,7 +304,23 @@ class InvestRepository(
         return when (e.code()) {
             401 -> "Неверный токен или нет доступа (401). Проверь токен в настройках."
             429 -> "Слишком много запросов (429). Попробуй чуть позже."
-            else -> detail ?: "Ошибка API: ${e.code()}"
+            else -> detail?.let { translateApiMessage(it) } ?: "Ошибка API: ${e.code()}"
+        }
+    }
+
+    /** Map common English gateway messages to friendlier Russian text. */
+    private fun translateApiMessage(message: String): String {
+        val lower = message.lowercase()
+        return when {
+            "not available for trading" in lower ->
+                "Инструмент недоступен для торговли (в песочнице доступны не все бумаги)."
+            "instrument is not found" in lower || "not found" in lower ->
+                "Инструмент не найден."
+            "not enough" in lower || "insufficient" in lower ->
+                "Недостаточно средств на счёте."
+            "market is not opened" in lower || "market is closed" in lower ->
+                "Рынок сейчас закрыт."
+            else -> message
         }
     }
 }
