@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,8 +22,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -131,16 +130,11 @@ private fun ConsolidatedContent(
     ) {
         item { SummaryCard(data, onSetPeriod) }
 
-        if (data.isReal) {
-            item { ReadOnlyBanner() }
-        }
-
-        if (data.overview.isNotEmpty()) {
-            item { MarketOverviewSection(data.overview, onOpenInstrument) }
-        }
-
         if (data.accounts.isEmpty()) {
             item { EmptyHint(data.isReal) }
+            if (data.overview.isNotEmpty()) {
+                item { MarketOverviewSection(data.overview, onOpenInstrument) }
+            }
             return@LazyColumn
         }
 
@@ -164,6 +158,11 @@ private fun ConsolidatedContent(
             } else {
                 groupedPositions(only.groups, collapsed.toSet(), onToggle, onOpenInstrument)
             }
+        }
+
+        // Market overview goes at the bottom, after positions.
+        if (data.overview.isNotEmpty()) {
+            item { MarketOverviewSection(data.overview, onOpenInstrument) }
         }
     }
 }
@@ -357,11 +356,18 @@ private fun SummaryCard(data: PortfolioUiState.Data, onSetPeriod: (Period) -> Un
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = if (data.showAccountList) "Все счета" else "Стоимость портфеля",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = if (data.showAccountList) "Все счета" else "Стоимость портфеля",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (data.isReal) ReadOnlyChip()
+            }
             Text(
                 text = MoneyFormat.amount(data.totalValue, data.totalCurrency),
                 style = MaterialTheme.typography.headlineSmall,
@@ -433,18 +439,29 @@ private fun AccountCard(account: AccountBlock, onSelect: (String) -> Unit) {
     }
 }
 
+/** Compact colored "view-only" chip shown in the summary header. */
 @Composable
-private fun ReadOnlyBanner() {
-    AssistChip(
-        onClick = {},
-        enabled = false,
-        leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null, Modifier.padding(0.dp)) },
-        label = { Text("Реальный счёт · только просмотр") },
-        colors = AssistChipDefaults.assistChipColors(
-            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
-    )
+private fun ReadOnlyChip() {
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(
+            Icons.Filled.Lock,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(14.dp),
+        )
+        Text(
+            "Только просмотр",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
 }
 
 /** Collapsible "market overview" card: USD, MOEX index, gold, Brent, BTC. */

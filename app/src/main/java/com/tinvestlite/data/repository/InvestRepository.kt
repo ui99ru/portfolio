@@ -255,8 +255,12 @@ class InvestRepository(
                     val instrument = when {
                         spec.exactTicker != null ->
                             candidates.firstOrNull { it.ticker.equals(spec.exactTicker, ignoreCase = true) }
-                        spec.nameKeyword != null ->
-                            candidates.firstOrNull { it.name.contains(spec.nameKeyword, ignoreCase = true) }
+                        spec.nameKeyword != null -> {
+                            val byName = candidates.filter { it.name.contains(spec.nameKeyword, ignoreCase = true) }
+                            // Prefer a candidate priced in the hinted currency (e.g. gold in USD).
+                            byName.firstOrNull { it.currency.equals(spec.currencyHint, ignoreCase = true) }
+                                ?: byName.firstOrNull()
+                        }
                         else -> candidates.firstOrNull()
                     }
                     instrument?.let { spec to it }
@@ -418,9 +422,9 @@ private data class OverviewSpec(
 private val MARKET_OVERVIEW = listOf(
     OverviewSpec("Доллар США", "USD000UTSTOM", "rub", exactTicker = "USD000UTSTOM"),
     OverviewSpec("Индекс МосБиржи", "IMOEX", "rub", exactTicker = "IMOEX"),
-    OverviewSpec("Золото", "GLDRUB_TOM", "rub", exactTicker = "GLDRUB_TOM"),
-    OverviewSpec("Нефть Brent", "Brent", "usd", nameKeyword = "brent"),
-    OverviewSpec("Биткоин", "BTCUSDF", "usd", nameKeyword = "bitcoin"),
+    OverviewSpec("Золото", "Gold", "usd", nameKeyword = "gold"),
+    OverviewSpec("Нефть Brent", "LCOC1", "usd", exactTicker = "LCOC1"),
+    OverviewSpec("Биткоин", "BTCUSD", "usd", nameKeyword = "bitcoin"),
 )
 
 private fun Quotation.toDoubleOrZero(): Double = units + nano / 1_000_000_000.0
