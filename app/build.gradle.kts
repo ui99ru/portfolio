@@ -1,9 +1,24 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
 }
+
+// Release signing is resolved from (in priority order):
+//   1. a local, git-ignored keystore.properties file, or
+//   2. environment variables (set by CI from GitHub Secrets).
+// The private release key never lives in the repo. If neither is available
+// (e.g. before secrets are configured) the build falls back to the committed
+// "shared" key so CI stays green.
+val keystoreProps = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+fun signingValue(propKey: String, envKey: String): String? =
+    keystoreProps.getProperty(propKey) ?: System.getenv(envKey)
 
 android {
     namespace = "com.tinvestlite"
@@ -20,14 +35,30 @@ android {
     }
 
     signingConfigs {
-        // A fixed, committed key so every build (CI debug APKs included) carries
-        // the same signature — required to update over a previous install
-        // instead of having to uninstall first. Not for Google Play distribution.
+        // Committed key used for debug/sideload builds so they always share one
+        // signature (in-place updates without reinstall). Not for distribution.
         create("shared") {
             storeFile = rootProject.file("keystore/tinvest-lite.jks")
             storePassword = "tinvestlite"
             keyAlias = "tinvestlite"
             keyPassword = "tinvestlite"
+        }
+
+        // Secure release key — sourced from secrets, never committed.
+        create("release") {
+            val storePath = signingValue("storeFile", "RELEASE_STORE_FILE")
+            if (storePath != null && file(storePath).exists()) {
+                storeFile = file(storePath)
+                storePassword = signingValue("storePassword", "RELEASE_STORE_PASSWORD")
+                keyAlias = signingValue("keyAlias", "RELEASE_KEY_ALIAS")
+                keyPassword = signingValue("keyPassword", "RELEASE_KEY_PASSWORD")
+            } else {
+                // Fallback so a release build still succeeds before secrets exist.
+                storeFile = rootProject.file("keystore/tinvest-lite.jks")
+                storePassword = "tinvestlite"
+                keyAlias = "tinvestlite"
+                keyPassword = "tinvestlite"
+            }
         }
     }
 
@@ -35,7 +66,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("shared")
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
