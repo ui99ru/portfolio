@@ -141,7 +141,11 @@ class InvestRepository(
     // ---- Instruments & market data (same endpoints in both modes) ----
 
     suspend fun findInstruments(query: String): ApiResult<List<InstrumentShort>> = safeCall {
-        api.findInstrument(FindInstrumentRequest(query = query)).instruments
+        // apiTradeAvailableFlag = false → include instruments not tradable via
+        // the API too (e.g. some funds in sandbox), so search can still find them.
+        api.findInstrument(
+            FindInstrumentRequest(query = query, apiTradeAvailableFlag = false),
+        ).instruments
     }
 
     suspend fun getInstrument(uid: String): ApiResult<InstrumentDetail> = safeCall {

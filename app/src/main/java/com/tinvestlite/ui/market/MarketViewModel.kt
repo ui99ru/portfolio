@@ -111,8 +111,9 @@ class MarketViewModel(
             _state.value = _state.value.copy(isLoading = true, error = null)
             when (val result = repository.findInstruments(query.trim())) {
                 is ApiResult.Success -> {
+                    // No country filter on search: the user typed a specific
+                    // query, so show whatever the API returns.
                     val list = result.data
-                        .filter { isRussian(it) }
                         .distinctBy { it.uid }
                         .take(DISPLAY_LIMIT)
                     publishAndQuote(list)
