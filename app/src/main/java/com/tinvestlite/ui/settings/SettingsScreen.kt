@@ -128,8 +128,18 @@ private fun RealTokenCard(state: SettingsUiState, vm: SettingsViewModel) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                TextButton(onClick = vm::removeRealToken) {
-                    Text("Удалить реальный токен")
+                // Allow removal only while in the real mode — avoids accidentally
+                // dropping the real token from the sandbox screen.
+                if (state.mode == AppMode.Real) {
+                    TextButton(onClick = vm::removeRealToken) {
+                        Text("Удалить реальный токен")
+                    }
+                } else {
+                    Text(
+                        "Удалить его можно в режиме «Реальный».",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             } else {
                 var token by rememberSaveable { mutableStateOf("") }
