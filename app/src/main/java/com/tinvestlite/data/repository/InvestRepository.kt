@@ -249,11 +249,16 @@ class InvestRepository(
                     val candidates = api.findInstrument(
                         FindInstrumentRequest(query = spec.query, apiTradeAvailableFlag = false),
                     ).instruments.filter { it.uid.isNotBlank() }
-                    // Prefer an exact ticker (or ISIN) match so e.g. "IMOEX" resolves
-                    // to the index itself rather than a bond with IMOEX in its name.
-                    val instrument = candidates.firstOrNull { it.ticker.equals(spec.query, ignoreCase = true) }
-                        ?: candidates.firstOrNull { it.isin.equals(spec.query, ignoreCase = true) }
-                        ?: candidates.firstOrNull()
+                    // Resolve precisely: exact ticker when given, else a name
+                    // keyword match (avoids e.g. "BR" matching Broadridge instead
+                    // of Brent oil), else the first result.
+                    val instrument = when {
+                        spec.exactTicker != null ->
+                            candidates.firstOrNull { it.ticker.equals(spec.exactTicker, ignoreCase = true) }
+                        spec.nameKeyword != null ->
+                            candidates.firstOrNull { it.name.contains(spec.nameKeyword, ignoreCase = true) }
+                        else -> candidates.firstOrNull()
+                    }
                     instrument?.let { spec to it }
                 }
             }.awaitAll().filterNotNull()
@@ -400,6 +405,10 @@ private data class OverviewSpec(
     val title: String,
     val query: String,
     val currencyHint: String,
+    /** Exact ticker to prefer among results; null → match by name keyword. */
+    val exactTicker: String? = null,
+    /** Name keyword used when [exactTicker] is null (case-insensitive). */
+    val nameKeyword: String? = null,
 )
 
 /**
@@ -407,11 +416,11 @@ private data class OverviewSpec(
  * exact instrument depends on what the API returns; misses are skipped.
  */
 private val MARKET_OVERVIEW = listOf(
-    OverviewSpec("Доллар США", "USD000UTSTOM", "rub"),
-    OverviewSpec("Индекс МосБиржи", "IMOEX", "rub"),
-    OverviewSpec("Золото", "GLDRUB_TOM", "rub"),
-    OverviewSpec("Нефть Brent", "BR", "usd"),
-    OverviewSpec("Биткоин", "BTCUSD", "usd"),
+    OverviewSpec("Доллар США", "USD000UTSTOM", "rub", exactTicker = "USD000UTSTOM"),
+    OverviewSpec("Индекс МосБиржи", "IMOEX", "rub", exactTicker = "IMOEX"),
+    OverviewSpec("Золото", "GLDRUB_TOM", "rub", exactTicker = "GLDRUB_TOM"),
+    OverviewSpec("Нефть Brent", "Brent", "usd", nameKeyword = "brent"),
+    OverviewSpec("Биткоин", "BTCUSDF", "usd", nameKeyword = "bitcoin"),
 )
 
 private fun Quotation.toDoubleOrZero(): Double = units + nano / 1_000_000_000.0
