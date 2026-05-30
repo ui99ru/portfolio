@@ -51,6 +51,7 @@ import com.tinvestlite.ui.common.LoadingBox
 import com.tinvestlite.ui.common.changeColor
 import com.tinvestlite.ui.common.vmFactory
 import com.tinvestlite.util.MoneyFormat
+import java.math.BigDecimal
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
