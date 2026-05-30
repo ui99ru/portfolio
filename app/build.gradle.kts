@@ -19,10 +19,23 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
+    signingConfigs {
+        // A fixed, committed key so every build (CI debug APKs included) carries
+        // the same signature — required to update over a previous install
+        // instead of having to uninstall first. Not for Google Play distribution.
+        create("shared") {
+            storeFile = rootProject.file("keystore/tinvest-lite.jks")
+            storePassword = "tinvestlite"
+            keyAlias = "tinvestlite"
+            keyPassword = "tinvestlite"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.getByName("shared")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -31,6 +44,7 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("shared")
         }
     }
 
