@@ -3,6 +3,7 @@ package com.tinvestlite.ui.onboarding
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinvestlite.data.ApiResult
+import com.tinvestlite.data.AppMode
 import com.tinvestlite.data.local.TokenStore
 import com.tinvestlite.data.repository.InvestRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,17 +31,20 @@ class TokenViewModel(
             return
         }
         _state.value = TokenUiState(isChecking = true)
-        tokenStore.saveToken(trimmed)
+        // Onboarding always sets up the sandbox token; the real read-only token
+        // is added later from Settings.
+        tokenStore.setMode(AppMode.Sandbox)
+        tokenStore.saveToken(AppMode.Sandbox, trimmed)
 
         viewModelScope.launch {
-            when (val result = repository.ensureSandboxAccount()) {
+            when (val result = repository.ensureAccount()) {
                 is ApiResult.Success -> {
                     _state.value = TokenUiState()
                     onAuthorized()
                 }
                 is ApiResult.Error -> {
                     // Token rejected — roll back so the user isn't "half logged in".
-                    tokenStore.clear()
+                    tokenStore.clearToken(AppMode.Sandbox)
                     _state.value = TokenUiState(error = result.message)
                 }
             }

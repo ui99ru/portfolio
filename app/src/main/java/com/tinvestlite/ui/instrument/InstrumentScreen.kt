@@ -49,6 +49,8 @@ fun InstrumentScreen(
         factory = vmFactory { InstrumentViewModel(container.repository, uid) },
     )
     val state by vm.state.collectAsStateWithLifecycle()
+    val mode by container.tokenStore.mode.collectAsStateWithLifecycle()
+    val tradingEnabled = !mode.isReal
     val title = state.detail?.let { it.ticker.ifBlank { it.name } } ?: "Инструмент"
 
     Scaffold(
@@ -64,20 +66,29 @@ fun InstrumentScreen(
         },
         bottomBar = {
             if (state.detail != null) {
-                Row(
-                    Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Button(
-                        onClick = { onTrade(true) },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = ProfitGreen),
-                    ) { Text("Купить", color = MaterialTheme.colorScheme.onPrimary) }
-                    Button(
-                        onClick = { onTrade(false) },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = LossRed),
-                    ) { Text("Продать", color = MaterialTheme.colorScheme.onPrimary) }
+                if (tradingEnabled) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Button(
+                            onClick = { onTrade(true) },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = ProfitGreen),
+                        ) { Text("Купить", color = MaterialTheme.colorScheme.onPrimary) }
+                        Button(
+                            onClick = { onTrade(false) },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = LossRed),
+                        ) { Text("Продать", color = MaterialTheme.colorScheme.onPrimary) }
+                    }
+                } else {
+                    Text(
+                        text = "Реальный счёт — только просмотр. Торговля доступна в режиме песочницы.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    )
                 }
             }
         },

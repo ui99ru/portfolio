@@ -3,6 +3,7 @@ package com.tinvestlite.ui.portfolio
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,7 +11,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,10 +52,20 @@ fun PortfolioScreen(
     )
     val state by vm.state.collectAsStateWithLifecycle()
 
+    val data = state as? PortfolioUiState.Data
+    val drilledIn = data?.isConsolidated == false
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Портфель") },
+                title = { Text(if (drilledIn) data?.selectedAccount?.title ?: "Счёт" else "Портфель") },
+                navigationIcon = {
+                    if (drilledIn) {
+                        IconButton(onClick = { vm.selectAccount(null) }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                        }
+                    }
+                },
                 actions = {
                     IconButton(onClick = vm::refresh) {
                         Icon(Icons.Filled.Refresh, contentDescription = "Обновить")
@@ -61,36 +77,93 @@ fun PortfolioScreen(
         when (val s = state) {
             is PortfolioUiState.Loading -> LoadingBox(Modifier.padding(padding))
             is PortfolioUiState.Error -> ErrorBox(s.message, Modifier.padding(padding), vm::refresh)
-            is PortfolioUiState.Data -> PortfolioContent(s, onOpenInstrument, Modifier.padding(padding))
+            is PortfolioUiState.Data ->
+                if (s.isConsolidated) {
+                    ConsolidatedContent(s, vm::selectAccount, onOpenInstrument, Modifier.padding(padding))
+                } else {
+                    val account = s.selectedAccount
+                    if (account == null) {
+                        ErrorBox("Счёт не найден", Modifier.padding(padding)) { vm.selectAccount(null) }
+                    } else {
+                        AccountDetailContent(account, onOpenInstrument, Modifier.padding(padding))
+                    }
+                }
         }
     }
 }
 
 @Composable
-private fun PortfolioContent(
+private fun ConsolidatedContent(
     data: PortfolioUiState.Data,
+    onSelectAccount: (String) -> Unit,
     onOpenInstrument: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+        contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item { SummaryCard(data) }
 
-        if (data.rows.isEmpty()) {
+        if (data.isReal) {
+            item { ReadOnlyBanner() }
+        }
+
+        if (data.accounts.isEmpty()) {
+            item { EmptyHint(data.isReal) }
+            return@LazyColumn
+        }
+
+        if (data.showAccountList) {
+            // Multiple accounts → show each as a tappable card to drill in.
             item {
                 Text(
-                    text = "В портфеле пока нет бумаг. Найди инструмент на вкладке «Рынок» " +
-                        "и соверши первую сделку.",
+                    "Счета",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
+                )
+            }
+            items(data.accounts, key = { it.accountId }) { account ->
+                AccountCard(account, onSelectAccount)
+            }
+        } else {
+            // Single account → show its positions inline.
+            val only = data.accounts.first()
+            if (only.rows.isEmpty()) {
+                item { EmptyHint(data.isReal) }
+            } else {
+                items(only.rows, key = { it.uid }) { row ->
+                    PositionRow(row, onOpenInstrument)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountDetailContent(
+    account: AccountBlock,
+    onOpenInstrument: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item { AccountSummaryCard(account) }
+        if (account.rows.isEmpty()) {
+            item {
+                Text(
+                    "На этом счёте нет бумаг.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp),
                 )
             }
         } else {
-            items(data.rows, key = { it.uid }) { row ->
+            items(account.rows, key = { it.uid }) { row ->
                 PositionRow(row, onOpenInstrument)
             }
         }
@@ -105,7 +178,7 @@ private fun SummaryCard(data: PortfolioUiState.Data) {
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                text = "Стоимость портфеля",
+                text = if (data.showAccountList) "Все счета" else "Стоимость портфеля",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -128,11 +201,99 @@ private fun SummaryCard(data: PortfolioUiState.Data) {
 }
 
 @Composable
+private fun AccountSummaryCard(account: AccountBlock) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                text = MoneyFormat.amount(account.totalValue, account.currency),
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            Text(
+                text = "Доходность ${MoneyFormat.percent(account.yieldPercent)}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = changeColor(account.yieldPercent),
+            )
+            Text(
+                text = "Свободно: ${MoneyFormat.amount(account.freeCash, account.currency)}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AccountCard(account: AccountBlock, onSelect: (String) -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSelect(account.accountId) },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Row(
+            Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(account.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = "${account.rows.size} позиц. · ${MoneyFormat.percent(account.yieldPercent)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = changeColor(account.yieldPercent),
+                )
+            }
+            Text(
+                text = MoneyFormat.amount(account.totalValue, account.currency),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReadOnlyBanner() {
+    AssistChip(
+        onClick = {},
+        enabled = false,
+        leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null, Modifier.padding(0.dp)) },
+        label = { Text("Реальный счёт · только просмотр") },
+        colors = AssistChipDefaults.assistChipColors(
+            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
+    )
+}
+
+@Composable
+private fun EmptyHint(isReal: Boolean) {
+    Text(
+        text = if (isReal) {
+            "На счетах нет открытых позиций."
+        } else {
+            "В портфеле пока нет бумаг. Найди инструмент на вкладке «Рынок» " +
+                "и соверши первую сделку."
+        },
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+}
+
+@Composable
 private fun PositionRow(row: PortfolioRow, onOpenInstrument: (String) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onOpenInstrument(row.uid) }
+            .clickable(enabled = row.uid.isNotBlank()) { onOpenInstrument(row.uid) }
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

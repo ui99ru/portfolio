@@ -32,14 +32,13 @@ class OperationsViewModel(
     fun refresh() {
         _state.value = OperationsUiState.Loading
         viewModelScope.launch {
-            val accountId = tokenStore.accountId
-                ?: when (val acc = repository.ensureSandboxAccount()) {
-                    is ApiResult.Success -> acc.data
-                    is ApiResult.Error -> {
-                        _state.value = OperationsUiState.Error(acc.message)
-                        return@launch
-                    }
+            val accountId = when (val acc = repository.ensureAccount()) {
+                is ApiResult.Success -> acc.data
+                is ApiResult.Error -> {
+                    _state.value = OperationsUiState.Error(acc.message)
+                    return@launch
                 }
+            }
 
             val now = Instant.now()
             val from = now.minus(90, ChronoUnit.DAYS)

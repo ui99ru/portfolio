@@ -1,6 +1,7 @@
 package com.tinvestlite.data.repository
 
 import com.tinvestlite.data.ApiResult
+import com.tinvestlite.data.AppMode
 import com.tinvestlite.data.local.TokenStore
 import com.tinvestlite.data.remote.NetworkModule
 import com.tinvestlite.data.remote.TInvestApi
@@ -29,40 +30,61 @@ import com.tinvestlite.data.remote.dto.PostOrderResponse
 import com.tinvestlite.data.remote.dto.Quotation
 import com.tinvestlite.data.remote.dto.SandboxPayInRequest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import retrofit2.HttpException
 import java.io.IOException
 import java.util.UUID
 
-/** Sandbox account name created on first launch. */
-private const val SANDBOX_ACCOUNT_NAME = "TInvestLite Sandbox"
-
 class InvestRepository(
     private val tokenStore: TokenStore,
     private val enableLogging: Boolean,
 ) {
 
-    // Recreated whenever needed; the interceptor reads the token live.
+    // Recreated whenever needed; the interceptor reads the active-mode token live.
     private val api: TInvestApi by lazy { NetworkModule.create(tokenStore, enableLogging) }
+
+    private val mode: AppMode get() = tokenStore.mode.value
 
     // ---- Accounts ----
 
+    /** Open accounts for the active mode (sandbox or real). */
     suspend fun listAccounts(): ApiResult<List<Account>> = safeCall {
-        api.getSandboxAccounts(GetAccountsRequest()).accounts
+        fetchAccounts()
     }
 
-    /** Returns an existing sandbox account or opens a fresh one. */
-    suspend fun ensureSandboxAccount(): ApiResult<String> = safeCall {
-        val existing = api.getSandboxAccounts(GetAccountsRequest()).accounts
-            .firstOrNull { it.status == "ACCOUNT_STATUS_OPEN" || it.status.isBlank() }
-        val id = existing?.id ?: api.openSandboxAccount(OpenSandboxAccountRequest()).accountId
-        tokenStore.accountId = id
+    private suspend fun fetchAccounts(): List<Account> {
+        val accounts = if (mode.isReal) {
+            api.getRealAccounts(GetAccountsRequest()).accounts
+        } else {
+            api.getSandboxAccounts(GetAccountsRequest()).accounts
+        }
+        return accounts.filter { it.status == "ACCOUNT_STATUS_OPEN" || it.status.isBlank() }
+    }
+
+    /**
+     * Ensures a usable account id for the active mode.
+     * Sandbox: opens an account if none exists. Real: picks the saved account
+     * or the first open one (read-only — never creates anything).
+     */
+    suspend fun ensureAccount(): ApiResult<String> = safeCall {
+        tokenStore.accountId(mode)?.let { return@safeCall it }
+        val accounts = fetchAccounts()
+        val id = if (mode.isReal) {
+            accounts.firstOrNull()?.id
+                ?: throw IllegalStateException("На реальном токене нет доступных счетов")
+        } else {
+            accounts.firstOrNull()?.id ?: api.openSandboxAccount(OpenSandboxAccountRequest()).accountId
+        }
+        tokenStore.setAccountId(mode, id)
         id
     }
 
     suspend fun payIn(accountId: String, units: Long, currency: String = "rub"): ApiResult<Unit> =
-        safeCall {
+        guardSandbox {
             api.sandboxPayIn(
                 SandboxPayInRequest(
                     accountId = accountId,
@@ -75,7 +97,28 @@ class InvestRepository(
     // ---- Portfolio ----
 
     suspend fun getPortfolio(accountId: String): ApiResult<PortfolioResponse> = safeCall {
-        api.getSandboxPortfolio(PortfolioRequest(accountId = accountId))
+        fetchPortfolio(accountId)
+    }
+
+    private suspend fun fetchPortfolio(accountId: String): PortfolioResponse =
+        if (mode.isReal) {
+            api.getRealPortfolio(PortfolioRequest(accountId = accountId))
+        } else {
+            api.getSandboxPortfolio(PortfolioRequest(accountId = accountId))
+        }
+
+    /**
+     * Consolidated view across every open account in the active mode.
+     * Returns the per-account portfolios paired with their account, so the UI
+     * can show a combined total and let the user drill into each one.
+     */
+    suspend fun getAllPortfolios(): ApiResult<List<AccountPortfolio>> = safeCall {
+        coroutineScope {
+            val accounts = fetchAccounts()
+            accounts.map { account ->
+                async { AccountPortfolio(account, fetchPortfolio(account.id)) }
+            }.awaitAll()
+        }
     }
 
     // ---- Operations ----
@@ -85,12 +128,15 @@ class InvestRepository(
         from: String,
         to: String,
     ): ApiResult<List<Operation>> = safeCall {
-        api.getSandboxOperations(
-            OperationsRequest(accountId = accountId, from = from, to = to),
-        ).operations.sortedByDescending { it.date }
+        val ops = if (mode.isReal) {
+            api.getRealOperations(OperationsRequest(accountId = accountId, from = from, to = to))
+        } else {
+            api.getSandboxOperations(OperationsRequest(accountId = accountId, from = from, to = to))
+        }
+        ops.operations.sortedByDescending { it.date }
     }
 
-    // ---- Instruments & market data ----
+    // ---- Instruments & market data (same endpoints in both modes) ----
 
     suspend fun findInstruments(query: String): ApiResult<List<InstrumentShort>> = safeCall {
         api.findInstrument(FindInstrumentRequest(query = query)).instruments
@@ -145,7 +191,7 @@ class InvestRepository(
             .lastPrices.firstOrNull()?.price ?: Quotation()
     }
 
-    // ---- Orders ----
+    // ---- Orders (sandbox only — real mode is read-only) ----
 
     suspend fun postOrder(
         accountId: String,
@@ -154,7 +200,7 @@ class InvestRepository(
         isBuy: Boolean,
         isMarket: Boolean,
         price: Quotation?,
-    ): ApiResult<PostOrderResponse> = safeCall {
+    ): ApiResult<PostOrderResponse> = guardSandbox {
         api.postSandboxOrder(
             PostOrderRequest(
                 accountId = accountId,
@@ -168,11 +214,11 @@ class InvestRepository(
         )
     }
 
-    suspend fun getOrders(accountId: String): ApiResult<List<OrderState>> = safeCall {
+    suspend fun getOrders(accountId: String): ApiResult<List<OrderState>> = guardSandbox {
         api.getSandboxOrders(GetOrdersRequest(accountId = accountId)).orders
     }
 
-    suspend fun cancelOrder(accountId: String, orderId: String): ApiResult<Unit> = safeCall {
+    suspend fun cancelOrder(accountId: String, orderId: String): ApiResult<Unit> = guardSandbox {
         api.cancelSandboxOrder(CancelOrderRequest(accountId = accountId, orderId = orderId))
         Unit
     }
@@ -185,6 +231,14 @@ class InvestRepository(
         val message: String = "",
         val description: String = "",
     )
+
+    /** Refuses to run trading actions outside sandbox; everything else via [safeCall]. */
+    private suspend fun <T> guardSandbox(block: suspend () -> T): ApiResult<T> {
+        if (mode.isReal) {
+            return ApiResult.Error("Торговля недоступна в режиме реального счёта (только чтение).")
+        }
+        return safeCall(block)
+    }
 
     private suspend fun <T> safeCall(block: suspend () -> T): ApiResult<T> =
         withContext(Dispatchers.IO) {
@@ -213,3 +267,9 @@ class InvestRepository(
         }
     }
 }
+
+/** A single account paired with its portfolio — used for the consolidated view. */
+data class AccountPortfolio(
+    val account: Account,
+    val portfolio: PortfolioResponse,
+)

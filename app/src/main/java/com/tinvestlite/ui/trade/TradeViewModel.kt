@@ -75,7 +75,7 @@ class TradeViewModel(
 
     fun submit() {
         val s = _state.value
-        val accountId = tokenStore.accountId
+        val accountId = tokenStore.accountId(tokenStore.mode.value)
         if (accountId == null) {
             _state.value = s.copy(error = "Нет активного счёта")
             return

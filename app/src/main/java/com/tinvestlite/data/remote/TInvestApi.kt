@@ -82,6 +82,17 @@ interface TInvestApi {
     @POST("tinkoff.public.invest.api.contract.v1.SandboxService/CancelSandboxOrder")
     suspend fun cancelSandboxOrder(@Body body: CancelOrderRequest): CancelOrderResponse
 
+    // ---- Real account: read-only (Users/Operations/Portfolio services) ----
+
+    @POST("tinkoff.public.invest.api.contract.v1.UsersService/GetAccounts")
+    suspend fun getRealAccounts(@Body body: GetAccountsRequest): GetAccountsResponse
+
+    @POST("tinkoff.public.invest.api.contract.v1.OperationsService/GetPortfolio")
+    suspend fun getRealPortfolio(@Body body: PortfolioRequest): PortfolioResponse
+
+    @POST("tinkoff.public.invest.api.contract.v1.OperationsService/GetOperations")
+    suspend fun getRealOperations(@Body body: OperationsRequest): OperationsResponse
+
     // ---- Instruments ----
 
     @POST("tinkoff.public.invest.api.contract.v1.InstrumentsService/FindInstrument")
