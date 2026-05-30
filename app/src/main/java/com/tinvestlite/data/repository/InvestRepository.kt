@@ -206,7 +206,7 @@ class InvestRepository(
      * show the daily change. Missing entries simply don't appear in the map.
      */
     suspend fun getQuotes(uids: List<String>): ApiResult<Map<String, Quote>> = safeCall {
-        if (uids.isEmpty()) return@safeCall emptyMap()
+        if (uids.isEmpty()) return@safeCall emptyMap<String, Quote>()
         coroutineScope {
             val lastDeferred = async {
                 api.getLastPrices(GetLastPricesRequest(instrumentId = uids)).lastPrices
