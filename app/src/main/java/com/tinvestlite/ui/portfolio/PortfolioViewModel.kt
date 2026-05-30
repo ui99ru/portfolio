@@ -254,7 +254,11 @@ class PortfolioViewModel(
                     dayChange = dayChange,
                     dayPercent = pct(dayChange),
                     rows = rows,
-                    groups = buildGroups(rows, totalValue),
+                    groups = buildGroups(
+                        rows,
+                        accountTotalRub = totalValue,
+                        cashRub = ap.portfolio.totalAmountCurrencies.toBigDecimal(),
+                    ),
                 )
             }
         }.awaitAll()
@@ -350,7 +354,11 @@ class PortfolioViewModel(
      * frozen subtotal is derived as (account total in RUB − liquid total),
      * avoiding any FX conversion of foreign-currency positions.
      */
-    private fun buildGroups(rows: List<PortfolioRow>, accountTotalRub: BigDecimal): GroupedPositions {
+    private fun buildGroups(
+        rows: List<PortfolioRow>,
+        accountTotalRub: BigDecimal,
+        cashRub: BigDecimal,
+    ): GroupedPositions {
         val frozenRows = rows.filter { it.frozen }
         val liquidRows = rows.filterNot { it.frozen }
 
@@ -363,8 +371,9 @@ class PortfolioViewModel(
         val frozen = if (frozenRows.isEmpty()) {
             null
         } else {
-            // Frozen value in RUB = whole account − liquid (never negative).
-            val frozenRub = accountTotalRub.subtract(liquidTotal).max(BigDecimal.ZERO)
+            // Frozen value in RUB = account total − liquid − free cash
+            // (cash is RUB). Avoids any FX; never negative.
+            val frozenRub = accountTotalRub.subtract(liquidTotal).subtract(cashRub).max(BigDecimal.ZERO)
             PositionGroup("Замороженные", frozenRub, frozenRows)
         }
 
