@@ -27,6 +27,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -91,13 +94,13 @@ fun PortfolioScreen(
             is PortfolioUiState.Error -> ErrorBox(s.message, Modifier.padding(padding), vm::refresh)
             is PortfolioUiState.Data ->
                 if (s.isConsolidated) {
-                    ConsolidatedContent(s, vm::selectAccount, onOpenInstrument, Modifier.padding(padding))
+                    ConsolidatedContent(s, vm::selectAccount, vm::setPeriod, onOpenInstrument, Modifier.padding(padding))
                 } else {
                     val account = s.selectedAccount
                     if (account == null) {
                         ErrorBox("Счёт не найден", Modifier.padding(padding)) { vm.selectAccount(null) }
                     } else {
-                        AccountDetailContent(account, onOpenInstrument, Modifier.padding(padding))
+                        AccountDetailContent(account, s.period, vm::setPeriod, onOpenInstrument, Modifier.padding(padding))
                     }
                 }
         }
@@ -108,6 +111,7 @@ fun PortfolioScreen(
 private fun ConsolidatedContent(
     data: PortfolioUiState.Data,
     onSelectAccount: (String) -> Unit,
+    onSetPeriod: (Period) -> Unit,
     onOpenInstrument: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -116,7 +120,7 @@ private fun ConsolidatedContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        item { SummaryCard(data) }
+        item { SummaryCard(data, onSetPeriod) }
 
         if (data.isReal) {
             item { ReadOnlyBanner() }
@@ -160,6 +164,8 @@ private fun ConsolidatedContent(
 @Composable
 private fun AccountDetailContent(
     account: AccountBlock,
+    period: Period,
+    onSetPeriod: (Period) -> Unit,
     onOpenInstrument: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -168,7 +174,7 @@ private fun AccountDetailContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        item { AccountSummaryCard(account) }
+        item { AccountSummaryCard(account, period, onSetPeriod) }
         if (account.rows.isEmpty()) {
             item {
                 Text(
@@ -186,13 +192,42 @@ private fun AccountDetailContent(
     }
 }
 
+/** Money + percent change line, e.g. "+1 234,00 ₽ · +1,23%". */
+private fun changeText(money: BigDecimal, percent: Double, currency: String): String {
+    val sign = if (money.signum() >= 0) "+" else ""
+    return "$sign${MoneyFormat.amount(money, currency)} · ${MoneyFormat.percent(percent)}"
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SummaryCard(data: PortfolioUiState.Data) {
+private fun PeriodToggle(period: Period, onSetPeriod: (Period) -> Unit) {
+    SingleChoiceSegmentedButtonRow {
+        Period.entries.forEachIndexed { index, p ->
+            SegmentedButton(
+                selected = period == p,
+                onClick = { onSetPeriod(p) },
+                shape = SegmentedButtonDefaults.itemShape(index, Period.entries.size),
+                icon = {},
+            ) { Text(p.label) }
+        }
+    }
+}
+
+@Composable
+private fun SummaryCard(data: PortfolioUiState.Data, onSetPeriod: (Period) -> Unit) {
+    val money = if (data.period == Period.Day) data.totalDayChange else data.totalAllTimeChange
+    // Day percent is shown only for all-time (weighted) here; day % is derived per account.
+    val percent = if (data.period == Period.Day) {
+        val base = data.totalValue.subtract(data.totalDayChange)
+        if (base.signum() != 0) data.totalDayChange.toDouble() / base.toDouble() * 100.0 else 0.0
+    } else {
+        data.totalYieldPercent
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = if (data.showAccountList) "Все счета" else "Стоимость портфеля",
                 style = MaterialTheme.typography.labelMedium,
@@ -203,40 +238,34 @@ private fun SummaryCard(data: PortfolioUiState.Data) {
                 style = MaterialTheme.typography.headlineSmall,
             )
             Text(
-                text = "Доходность ${MoneyFormat.percent(data.totalYieldPercent)}",
+                text = changeText(money, percent, data.totalCurrency),
                 style = MaterialTheme.typography.bodyMedium,
-                color = changeColor(data.totalYieldPercent),
+                color = changeColor(money.toDouble()),
             )
-            Text(
-                text = "Свободно: ${MoneyFormat.amount(data.freeCash, data.totalCurrency)}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            PeriodToggle(data.period, onSetPeriod)
         }
     }
 }
 
 @Composable
-private fun AccountSummaryCard(account: AccountBlock) {
+private fun AccountSummaryCard(account: AccountBlock, period: Period, onSetPeriod: (Period) -> Unit) {
+    val money = if (period == Period.Day) account.dayChange else account.allTimeChange
+    val percent = if (period == Period.Day) account.dayPercent else account.allTimePercent
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = MoneyFormat.amount(account.totalValue, account.currency),
                 style = MaterialTheme.typography.headlineSmall,
             )
             Text(
-                text = "Доходность ${MoneyFormat.percent(account.yieldPercent)}",
+                text = changeText(money, percent, account.currency),
                 style = MaterialTheme.typography.bodyMedium,
-                color = changeColor(account.yieldPercent),
+                color = changeColor(money.toDouble()),
             )
-            Text(
-                text = "Свободно: ${MoneyFormat.amount(account.freeCash, account.currency)}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            PeriodToggle(period, onSetPeriod)
         }
     }
 }
@@ -257,9 +286,9 @@ private fun AccountCard(account: AccountBlock, onSelect: (String) -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text(account.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    text = "${account.rows.size} позиц. · ${MoneyFormat.percent(account.yieldPercent)}",
+                    text = "${account.rows.size} позиц. · ${MoneyFormat.percent(account.allTimePercent)}",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = changeColor(account.yieldPercent),
+                    color = changeColor(account.allTimePercent),
                 )
             }
             Text(

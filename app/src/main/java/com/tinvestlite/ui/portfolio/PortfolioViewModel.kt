@@ -32,14 +32,19 @@ data class PortfolioRow(
     val currency: String,
 )
 
+/** Which time period the change figures refer to. */
+enum class Period(val label: String) { Day("День"), AllTime("За всё время") }
+
 /** One account's worth of data inside the consolidated view. */
 data class AccountBlock(
     val accountId: String,
     val title: String,
     val totalValue: BigDecimal,
-    val yieldPercent: Double,
-    val freeCash: BigDecimal,
     val currency: String,
+    val allTimeChange: BigDecimal,
+    val allTimePercent: Double,
+    val dayChange: BigDecimal,
+    val dayPercent: Double,
     val rows: List<PortfolioRow>,
 )
 
@@ -51,11 +56,13 @@ sealed interface PortfolioUiState {
         val totalValue: BigDecimal,
         val totalCurrency: String,
         val totalYieldPercent: Double,
-        val freeCash: BigDecimal,
+        val totalAllTimeChange: BigDecimal,
+        val totalDayChange: BigDecimal,
         val accounts: List<AccountBlock>,
         val overview: List<OverviewItem> = emptyList(),
         /** null → consolidated overview; otherwise the drilled-into account. */
         val selectedAccountId: String? = null,
+        val period: Period = Period.AllTime,
     ) : PortfolioUiState {
         val isConsolidated: Boolean get() = selectedAccountId == null
         val selectedAccount: AccountBlock?
@@ -121,6 +128,13 @@ class PortfolioViewModel(
         }
     }
 
+    fun setPeriod(period: Period) {
+        val current = _state.value
+        if (current is PortfolioUiState.Data) {
+            _state.value = current.copy(period = period)
+        }
+    }
+
     private suspend fun buildState(
         data: List<AccountPortfolio>,
         overview: List<OverviewItem>,
@@ -132,54 +146,92 @@ class PortfolioViewModel(
                 totalValue = BigDecimal.ZERO,
                 totalCurrency = "rub",
                 totalYieldPercent = 0.0,
-                freeCash = BigDecimal.ZERO,
+                totalAllTimeChange = BigDecimal.ZERO,
+                totalDayChange = BigDecimal.ZERO,
                 accounts = emptyList(),
                 overview = overview,
             )
         }
 
+        // Day-change needs previous-close quotes for every held instrument.
+        val allUids = data.flatMap { ap ->
+            ap.portfolio.positions
+                .filter { it.instrumentType != "currency" && it.instrumentUid.isNotBlank() }
+                .map { it.instrumentUid }
+        }.distinct()
+        val quotes = (repository.getQuotes(allUids) as? ApiResult.Success)?.data ?: emptyMap()
+
         val blocks = data.map { ap ->
             async {
-                val rows = ap.portfolio.positions
-                    .filter { it.instrumentType != "currency" }
-                    .map { position ->
-                        async {
-                            val info = resolveInfo(position.instrumentUid, position.figi, position.ticker)
-                            val qty = position.quantity.toBigDecimal()
-                            val value = position.currentPrice.toBigDecimal().multiply(qty)
-                            PortfolioRow(
-                                uid = position.instrumentUid,
-                                name = info.name,
-                                ticker = info.ticker,
-                                logoUrl = info.logoUrl,
-                                quantity = qty,
-                                value = value,
-                                yieldPercent = position.expectedYield.toDouble(),
-                                currency = position.currentPrice.currency
-                                    .ifBlank { position.currentPriceCurrency ?: "rub" },
-                            )
-                        }
+                val securities = ap.portfolio.positions.filter { it.instrumentType != "currency" }
+                val rows = securities.map { position ->
+                    async {
+                        val info = resolveInfo(position.instrumentUid, position.figi, position.ticker)
+                        val qty = position.quantity.toBigDecimal()
+                        val value = position.currentPrice.toBigDecimal().multiply(qty)
+                        PortfolioRow(
+                            uid = position.instrumentUid,
+                            name = info.name,
+                            ticker = info.ticker,
+                            logoUrl = info.logoUrl,
+                            quantity = qty,
+                            value = value,
+                            yieldPercent = position.expectedYield.toDouble(),
+                            currency = position.currentPrice.currency
+                                .ifBlank { position.currentPriceCurrency ?: "rub" },
+                        )
                     }
-                    .awaitAll()
-                    .sortedByDescending { it.value }
+                }.awaitAll().sortedByDescending { it.value }
+
+                val totalValue = ap.portfolio.totalAmountPortfolio.toBigDecimal()
+
+                // All-time change in money: Σ (current − average) × quantity.
+                val allTimeChange = securities.fold(BigDecimal.ZERO) { acc, p ->
+                    val diff = p.currentPrice.toBigDecimal().subtract(p.averagePositionPrice.toBigDecimal())
+                    acc.add(diff.multiply(p.quantity.toBigDecimal()))
+                }
+
+                // Day change in money: Σ (current − previousClose) × quantity,
+                // using the day-change % from quotes to back out the previous close.
+                val dayChange = securities.fold(BigDecimal.ZERO) { acc, p ->
+                    val q = quotes[p.instrumentUid] ?: return@fold acc
+                    val current = p.currentPrice.toBigDecimal()
+                    val prevClose = if (q.dayChangePercent != -100.0) {
+                        current.divide(
+                            BigDecimal.valueOf(1.0 + q.dayChangePercent / 100.0),
+                            10, java.math.RoundingMode.HALF_UP,
+                        )
+                    } else {
+                        current
+                    }
+                    acc.add(current.subtract(prevClose).multiply(p.quantity.toBigDecimal()))
+                }
+
+                fun pct(change: BigDecimal): Double {
+                    val base = totalValue.subtract(change)
+                    return if (base.signum() != 0) change.toDouble() / base.toDouble() * 100.0 else 0.0
+                }
 
                 AccountBlock(
                     accountId = ap.account.id,
                     title = accountTitle(ap.account.name, ap.account.type, ap.account.id),
-                    totalValue = ap.portfolio.totalAmountPortfolio.toBigDecimal(),
-                    yieldPercent = ap.portfolio.expectedYield.toDouble(),
-                    freeCash = ap.portfolio.totalAmountCurrencies.toBigDecimal(),
+                    totalValue = totalValue,
                     currency = ap.portfolio.totalAmountPortfolio.currency.ifBlank { "rub" },
+                    allTimeChange = allTimeChange,
+                    allTimePercent = ap.portfolio.expectedYield.toDouble(),
+                    dayChange = dayChange,
+                    dayPercent = pct(dayChange),
                     rows = rows,
                 )
             }
         }.awaitAll()
 
         val totalValue = blocks.fold(BigDecimal.ZERO) { acc, b -> acc.add(b.totalValue) }
-        val totalCash = blocks.fold(BigDecimal.ZERO) { acc, b -> acc.add(b.freeCash) }
-        // Portfolio-value-weighted average yield across accounts.
+        val totalAllTime = blocks.fold(BigDecimal.ZERO) { acc, b -> acc.add(b.allTimeChange) }
+        val totalDay = blocks.fold(BigDecimal.ZERO) { acc, b -> acc.add(b.dayChange) }
+        // Value-weighted all-time yield % across accounts.
         val weightedYield = if (totalValue.signum() != 0) {
-            blocks.sumOf { it.yieldPercent * it.totalValue.toDouble() } / totalValue.toDouble()
+            blocks.sumOf { it.allTimePercent * it.totalValue.toDouble() } / totalValue.toDouble()
         } else {
             0.0
         }
@@ -189,7 +241,8 @@ class PortfolioViewModel(
             totalValue = totalValue,
             totalCurrency = blocks.first().currency,
             totalYieldPercent = weightedYield,
-            freeCash = totalCash,
+            totalAllTimeChange = totalAllTime,
+            totalDayChange = totalDay,
             accounts = blocks,
             overview = overview,
         )
