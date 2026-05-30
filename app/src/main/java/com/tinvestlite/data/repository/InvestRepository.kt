@@ -242,9 +242,14 @@ class InvestRepository(
         coroutineScope {
             val resolved = MARKET_OVERVIEW.map { spec ->
                 async {
-                    val instrument = api.findInstrument(
+                    val candidates = api.findInstrument(
                         FindInstrumentRequest(query = spec.query, apiTradeAvailableFlag = false),
-                    ).instruments.firstOrNull { it.uid.isNotBlank() }
+                    ).instruments.filter { it.uid.isNotBlank() }
+                    // Prefer an exact ticker (or ISIN) match so e.g. "IMOEX" resolves
+                    // to the index itself rather than a bond with IMOEX in its name.
+                    val instrument = candidates.firstOrNull { it.ticker.equals(spec.query, ignoreCase = true) }
+                        ?: candidates.firstOrNull { it.isin.equals(spec.query, ignoreCase = true) }
+                        ?: candidates.firstOrNull()
                     instrument?.let { spec to it }
                 }
             }.awaitAll().filterNotNull()
