@@ -54,12 +54,12 @@ fun TokenScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = "Т-Инвест Lite",
+                text = "Titan",
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.primary,
             )
             Text(
-                text = "Минималистичный клиент Т-Инвестиций без рекламы. " +
+                text = "Минималистичный клиент для инвестиций без рекламы. " +
                     "Работает в режиме песочницы — виртуальные деньги, реальные котировки.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

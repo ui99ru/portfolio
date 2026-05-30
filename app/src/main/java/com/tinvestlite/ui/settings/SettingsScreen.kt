@@ -79,8 +79,8 @@ fun SettingsScreen(container: AppContainer) {
             }
 
             Text(
-                text = "Т-Инвест Lite v${BuildConfig.VERSION_NAME}. " +
-                    "Приложение не аффилировано с Т-Банком.",
+                text = "Titan v${BuildConfig.VERSION_NAME}. " +
+                    "Неофициальное приложение, не связано с каким-либо брокером.",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
