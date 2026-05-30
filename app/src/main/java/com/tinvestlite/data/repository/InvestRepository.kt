@@ -232,6 +232,46 @@ class InvestRepository(
         }
     }
 
+    /**
+     * Best-effort "market overview" — a fixed set of well-known instruments
+     * (USD, MOEX index, gold, Brent, Bitcoin) resolved by search query, then
+     * quoted. Items the API doesn't expose are silently skipped, so the result
+     * may be shorter than the request.
+     */
+    suspend fun getMarketOverview(): ApiResult<List<OverviewItem>> = safeCall {
+        coroutineScope {
+            val resolved = MARKET_OVERVIEW.map { spec ->
+                async {
+                    val instrument = api.findInstrument(
+                        FindInstrumentRequest(query = spec.query, apiTradeAvailableFlag = false),
+                    ).instruments.firstOrNull { it.uid.isNotBlank() }
+                    instrument?.let { spec to it }
+                }
+            }.awaitAll().filterNotNull()
+
+            val uids = resolved.map { it.second.uid }
+            val quotes = runCatching {
+                getQuotesInternal(uids)
+            }.getOrDefault(emptyMap())
+
+            resolved.mapNotNull { (spec, instrument) ->
+                val quote = quotes[instrument.uid] ?: return@mapNotNull null
+                OverviewItem(
+                    title = spec.title,
+                    uid = instrument.uid,
+                    logoUrl = com.tinvestlite.util.InstrumentLogo.url(instrument.brand),
+                    currency = instrument.currency.ifBlank { spec.currencyHint },
+                    quote = quote,
+                )
+            }
+        }
+    }
+
+    private suspend fun getQuotesInternal(uids: List<String>): Map<String, Quote> {
+        if (uids.isEmpty()) return emptyMap()
+        return (getQuotes(uids) as? ApiResult.Success)?.data ?: emptyMap()
+    }
+
     // ---- Orders (sandbox only — real mode is read-only) ----
 
     suspend fun postOrder(
@@ -335,6 +375,34 @@ data class AccountPortfolio(
 data class Quote(
     val lastPrice: Double,
     val dayChangePercent: Double,
+)
+
+/** A resolved market-overview entry shown on the portfolio screen. */
+data class OverviewItem(
+    val title: String,
+    val uid: String,
+    val logoUrl: String?,
+    val currency: String,
+    val quote: Quote,
+)
+
+/** What to look up for the market overview and how to label it. */
+private data class OverviewSpec(
+    val title: String,
+    val query: String,
+    val currencyHint: String,
+)
+
+/**
+ * Well-known instruments shown in the overview. Resolved by search, so the
+ * exact instrument depends on what the API returns; misses are skipped.
+ */
+private val MARKET_OVERVIEW = listOf(
+    OverviewSpec("Доллар США", "USD000UTSTOM", "rub"),
+    OverviewSpec("Индекс МосБиржи", "IMOEX", "rub"),
+    OverviewSpec("Золото", "GLDRUB_TOM", "rub"),
+    OverviewSpec("Нефть Brent", "BR", "usd"),
+    OverviewSpec("Биткоин", "BTCUSD", "usd"),
 )
 
 private fun Quotation.toDoubleOrZero(): Double = units + nano / 1_000_000_000.0

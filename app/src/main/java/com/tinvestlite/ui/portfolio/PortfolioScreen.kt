@@ -13,6 +13,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AssistChip
@@ -28,12 +30,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.tinvestlite.data.repository.OverviewItem
 import com.tinvestlite.di.AppContainer
 import com.tinvestlite.ui.common.ErrorBox
 import com.tinvestlite.ui.common.InstrumentIcon
@@ -109,6 +115,10 @@ private fun ConsolidatedContent(
 
         if (data.isReal) {
             item { ReadOnlyBanner() }
+        }
+
+        if (data.overview.isNotEmpty()) {
+            item { MarketOverviewSection(data.overview, onOpenInstrument) }
         }
 
         if (data.accounts.isEmpty()) {
@@ -272,6 +282,78 @@ private fun ReadOnlyBanner() {
             disabledLeadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ),
     )
+}
+
+/** Collapsible "market overview" card: USD, MOEX index, gold, Brent, BTC. */
+@Composable
+private fun MarketOverviewSection(
+    items: List<OverviewItem>,
+    onOpenInstrument: (String) -> Unit,
+) {
+    var expanded by rememberSaveable { mutableStateOf(true) }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Column(Modifier.padding(vertical = 8.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Обзор рынка",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Свернуть" else "Развернуть",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (expanded) {
+                items.forEach { item ->
+                    OverviewRow(item, onOpenInstrument)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OverviewRow(item: OverviewItem, onOpenInstrument: (String) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = item.uid.isNotBlank()) { onOpenInstrument(item.uid) }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        InstrumentIcon(logoUrl = item.logoUrl, fallbackText = item.title, size = 32)
+        Text(
+            text = item.title,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = MoneyFormat.amount(
+                    java.math.BigDecimal.valueOf(item.quote.lastPrice),
+                    item.currency,
+                ),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                text = MoneyFormat.percent(item.quote.dayChangePercent),
+                style = MaterialTheme.typography.bodyMedium,
+                color = changeColor(item.quote.dayChangePercent),
+            )
+        }
+    }
 }
 
 @Composable

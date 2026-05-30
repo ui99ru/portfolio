@@ -8,6 +8,7 @@ import com.tinvestlite.data.getOrNull
 import com.tinvestlite.data.local.TokenStore
 import com.tinvestlite.data.repository.AccountPortfolio
 import com.tinvestlite.data.repository.InvestRepository
+import com.tinvestlite.data.repository.OverviewItem
 import com.tinvestlite.util.InstrumentLogo
 import com.tinvestlite.util.toBigDecimal
 import com.tinvestlite.util.toDouble
@@ -52,6 +53,7 @@ sealed interface PortfolioUiState {
         val totalYieldPercent: Double,
         val freeCash: BigDecimal,
         val accounts: List<AccountBlock>,
+        val overview: List<OverviewItem> = emptyList(),
         /** null → consolidated overview; otherwise the drilled-into account. */
         val selectedAccountId: String? = null,
     ) : PortfolioUiState {
@@ -92,8 +94,22 @@ class PortfolioViewModel(
             }
 
             when (val result = repository.getAllPortfolios()) {
-                is ApiResult.Success -> _state.value = buildState(result.data)
+                is ApiResult.Success -> {
+                    _state.value = buildState(result.data, overview = emptyList())
+                    // Load the market overview in the background; merge when ready.
+                    loadOverview()
+                }
                 is ApiResult.Error -> _state.value = PortfolioUiState.Error(result.message)
+            }
+        }
+    }
+
+    private fun loadOverview() {
+        viewModelScope.launch {
+            val overview = (repository.getMarketOverview() as? ApiResult.Success)?.data ?: return@launch
+            val current = _state.value
+            if (current is PortfolioUiState.Data) {
+                _state.value = current.copy(overview = overview)
             }
         }
     }
@@ -105,7 +121,10 @@ class PortfolioViewModel(
         }
     }
 
-    private suspend fun buildState(data: List<AccountPortfolio>): PortfolioUiState = coroutineScope {
+    private suspend fun buildState(
+        data: List<AccountPortfolio>,
+        overview: List<OverviewItem>,
+    ): PortfolioUiState = coroutineScope {
         val isReal = tokenStore.mode.value == AppMode.Real
         if (data.isEmpty()) {
             return@coroutineScope PortfolioUiState.Data(
@@ -115,6 +134,7 @@ class PortfolioViewModel(
                 totalYieldPercent = 0.0,
                 freeCash = BigDecimal.ZERO,
                 accounts = emptyList(),
+                overview = overview,
             )
         }
 
@@ -171,6 +191,7 @@ class PortfolioViewModel(
             totalYieldPercent = weightedYield,
             freeCash = totalCash,
             accounts = blocks,
+            overview = overview,
         )
     }
 
