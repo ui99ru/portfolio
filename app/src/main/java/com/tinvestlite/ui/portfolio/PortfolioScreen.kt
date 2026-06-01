@@ -156,7 +156,7 @@ private fun ConsolidatedContent(
             if (only.rows.isEmpty()) {
                 item { EmptyHint(data.isReal) }
             } else {
-                groupedPositions(only.groups, collapsed.toSet(), onToggle, onOpenInstrument)
+                groupedPositions(only.groups, collapsed.toSet(), data.period, onToggle, onOpenInstrument)
             }
         }
 
@@ -171,6 +171,7 @@ private fun ConsolidatedContent(
 private fun androidx.compose.foundation.lazy.LazyListScope.groupedPositions(
     groups: GroupedPositions,
     collapsed: Set<String>,
+    period: Period,
     onToggle: (String) -> Unit,
     onOpenInstrument: (String) -> Unit,
 ) {
@@ -203,7 +204,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.groupedPositions(
                 }
                 if (!subCollapsed) {
                     items(sub.rows, key = { "$subKey-${it.uid}" }) { row ->
-                        PositionRow(row, onOpenInstrument)
+                        PositionRow(row, period, onOpenInstrument)
                     }
                 }
             }
@@ -299,7 +300,7 @@ private fun AccountDetailContent(
                 )
             }
         } else {
-            groupedPositions(account.groups, collapsed.toSet(), onToggle, onOpenInstrument)
+            groupedPositions(account.groups, collapsed.toSet(), period, onToggle, onOpenInstrument)
         }
     }
 }
@@ -557,7 +558,9 @@ private fun EmptyHint(isReal: Boolean) {
 }
 
 @Composable
-private fun PositionRow(row: PortfolioRow, onOpenInstrument: (String) -> Unit) {
+private fun PositionRow(row: PortfolioRow, period: Period, onOpenInstrument: (String) -> Unit) {
+    val change = if (period == Period.Day) row.dayChange else row.allTimeChange
+    val percent = if (period == Period.Day) row.dayPercent else row.allTimePercent
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -593,10 +596,12 @@ private fun PositionRow(row: PortfolioRow, onOpenInstrument: (String) -> Unit) {
                 text = MoneyFormat.amount(row.value, row.currency),
                 style = MaterialTheme.typography.titleMedium,
             )
+            // Change in the asset's own currency for the selected period.
+            val sign = if (change.signum() >= 0) "+" else ""
             Text(
-                text = MoneyFormat.percent(row.yieldPercent),
+                text = "$sign${MoneyFormat.amount(change, row.currency)} · ${MoneyFormat.percent(percent)}",
                 style = MaterialTheme.typography.bodyMedium,
-                color = changeColor(row.yieldPercent),
+                color = changeColor(change.toDouble()),
             )
         }
     }

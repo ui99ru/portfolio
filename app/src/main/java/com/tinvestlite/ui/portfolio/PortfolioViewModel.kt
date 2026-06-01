@@ -29,7 +29,10 @@ data class PortfolioRow(
     val logoUrl: String?,
     val quantity: BigDecimal,
     val value: BigDecimal,
-    val yieldPercent: Double,
+    val allTimeChange: BigDecimal,
+    val allTimePercent: Double,
+    val dayChange: BigDecimal,
+    val dayPercent: Double,
     val currency: String,
     val instrumentType: String,
     val frozen: Boolean,
@@ -204,9 +207,33 @@ class PortfolioViewModel(
                     async {
                         val info = resolveInfo(position.instrumentUid, position.figi, position.ticker)
                         val qty = position.quantity.toBigDecimal()
-                        val value = position.currentPrice.toBigDecimal().multiply(qty)
+                        val price = position.currentPrice.toBigDecimal()
+                        val value = price.multiply(qty)
                         val currency = position.currentPrice.currency
                             .ifBlank { position.currentPriceCurrency ?: "rub" }
+
+                        // All-time change in the position's currency.
+                        val avg = position.averagePositionPrice.toBigDecimal()
+                        val rowAllTime = price.subtract(avg).multiply(qty)
+                        val rowAllTimePct = if (avg.signum() != 0) {
+                            price.subtract(avg).toDouble() / avg.toDouble() * 100.0
+                        } else {
+                            0.0
+                        }
+
+                        // Day change from the previous close (derived from quote %).
+                        val q = quotes[position.instrumentUid]
+                        val dayPct = q?.dayChangePercent ?: 0.0
+                        val prevClose = if (q != null && dayPct != -100.0) {
+                            price.divide(
+                                BigDecimal.valueOf(1.0 + dayPct / 100.0),
+                                10, java.math.RoundingMode.HALF_UP,
+                            )
+                        } else {
+                            price
+                        }
+                        val rowDay = price.subtract(prevClose).multiply(qty)
+
                         PortfolioRow(
                             uid = position.instrumentUid,
                             name = info.name,
@@ -214,7 +241,10 @@ class PortfolioViewModel(
                             logoUrl = info.logoUrl,
                             quantity = qty,
                             value = value,
-                            yieldPercent = position.expectedYield.toDouble(),
+                            allTimeChange = rowAllTime,
+                            allTimePercent = rowAllTimePct,
+                            dayChange = rowDay,
+                            dayPercent = dayPct,
                             currency = currency,
                             instrumentType = position.instrumentType,
                             frozen = isFrozen(info, currency),
