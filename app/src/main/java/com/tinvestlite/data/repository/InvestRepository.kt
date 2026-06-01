@@ -225,7 +225,13 @@ class InvestRepository(
 
             uids.mapNotNull { uid ->
                 val lastPrice = last[uid]?.price?.toDoubleOrZero() ?: return@mapNotNull null
-                val prevClose = close[uid]?.price?.toDoubleOrZero() ?: 0.0
+                val closeEntry = close[uid]
+                // Prefer the evening-session close (the base the broker uses for
+                // today's change); fall back to the main-session close.
+                val prevClose = closeEntry?.eveningSessionPrice?.toDoubleOrZero()
+                    ?.takeIf { it > 0.0 }
+                    ?: closeEntry?.price?.toDoubleOrZero()
+                    ?: 0.0
                 val changePercent = if (prevClose > 0.0) {
                     (lastPrice - prevClose) / prevClose * 100.0
                 } else {
