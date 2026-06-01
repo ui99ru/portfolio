@@ -254,15 +254,23 @@ class PortfolioViewModel(
 
                 val totalValue = ap.portfolio.totalAmountPortfolio.toBigDecimal()
 
-                // All-time change in money: Σ (current − average) × quantity.
-                val allTimeChange = securities.fold(BigDecimal.ZERO) { acc, p ->
+                // Aggregate change is summed only over RUB-priced positions:
+                // mixing foreign-currency deltas (USD/HKD) as if they were roubles
+                // would distort the total, and we have no per-position FX rate.
+                val rubSecurities = securities.filter {
+                    it.currentPrice.currency.ifBlank { it.currentPriceCurrency ?: "rub" }
+                        .equals("rub", ignoreCase = true)
+                }
+
+                // All-time change in roubles: Σ (current − average) × quantity.
+                val allTimeChange = rubSecurities.fold(BigDecimal.ZERO) { acc, p ->
                     val diff = p.currentPrice.toBigDecimal().subtract(p.averagePositionPrice.toBigDecimal())
                     acc.add(diff.multiply(p.quantity.toBigDecimal()))
                 }
 
-                // Day change in money: Σ (current − previousClose) × quantity,
+                // Day change in roubles: Σ (current − previousClose) × quantity,
                 // using the day-change % from quotes to back out the previous close.
-                val dayChange = securities.fold(BigDecimal.ZERO) { acc, p ->
+                val dayChange = rubSecurities.fold(BigDecimal.ZERO) { acc, p ->
                     val q = quotes[p.instrumentUid] ?: return@fold acc
                     val current = p.currentPrice.toBigDecimal()
                     val prevClose = if (q.dayChangePercent != -100.0) {
