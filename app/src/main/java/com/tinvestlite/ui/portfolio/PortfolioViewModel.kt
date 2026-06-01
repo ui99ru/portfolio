@@ -253,23 +253,32 @@ class PortfolioViewModel(
                 }.awaitAll().sortedByDescending { it.value }
 
                 val totalValue = ap.portfolio.totalAmountPortfolio.toBigDecimal()
+                val allTimePercent = ap.portfolio.expectedYield.toDouble()
 
-                // Aggregate change is summed only over RUB-priced positions:
-                // mixing foreign-currency deltas (USD/HKD) as if they were roubles
-                // would distort the total, and we have no per-position FX rate.
+                // All-time change in roubles derived from the broker's own yield %
+                // and the rouble portfolio value:  value − value / (1 + yield/100).
+                // This matches the broker exactly (foreign assets included) without
+                // needing per-position FX rates.
+                val allTimeChange = run {
+                    val factor = 1.0 + allTimePercent / 100.0
+                    if (factor != 0.0) {
+                        totalValue.subtract(
+                            totalValue.divide(
+                                BigDecimal.valueOf(factor),
+                                2, java.math.RoundingMode.HALF_UP,
+                            ),
+                        )
+                    } else {
+                        BigDecimal.ZERO
+                    }
+                }
+
+                // Day change in roubles: Σ (current − previousClose) × quantity over
+                // RUB-priced positions (no per-position FX rate for foreign assets).
                 val rubSecurities = securities.filter {
                     it.currentPrice.currency.ifBlank { it.currentPriceCurrency ?: "rub" }
                         .equals("rub", ignoreCase = true)
                 }
-
-                // All-time change in roubles: Σ (current − average) × quantity.
-                val allTimeChange = rubSecurities.fold(BigDecimal.ZERO) { acc, p ->
-                    val diff = p.currentPrice.toBigDecimal().subtract(p.averagePositionPrice.toBigDecimal())
-                    acc.add(diff.multiply(p.quantity.toBigDecimal()))
-                }
-
-                // Day change in roubles: Σ (current − previousClose) × quantity,
-                // using the day-change % from quotes to back out the previous close.
                 val dayChange = rubSecurities.fold(BigDecimal.ZERO) { acc, p ->
                     val q = quotes[p.instrumentUid] ?: return@fold acc
                     val current = p.currentPrice.toBigDecimal()
@@ -295,7 +304,7 @@ class PortfolioViewModel(
                     totalValue = totalValue,
                     currency = ap.portfolio.totalAmountPortfolio.currency.ifBlank { "rub" },
                     allTimeChange = allTimeChange,
-                    allTimePercent = ap.portfolio.expectedYield.toDouble(),
+                    allTimePercent = allTimePercent,
                     dayChange = dayChange,
                     dayPercent = pct(dayChange),
                     rows = rows,
