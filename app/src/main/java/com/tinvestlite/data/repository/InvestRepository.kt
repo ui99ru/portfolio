@@ -428,7 +428,7 @@ private data class OverviewSpec(
 private val MARKET_OVERVIEW = listOf(
     OverviewSpec("Доллар США", "USD000UTSTOM", "rub", exactTicker = "USD000UTSTOM"),
     OverviewSpec("Индекс МосБиржи", "IMOEX", "rub", exactTicker = "IMOEX"),
-    OverviewSpec("Золото", "Gold", "usd", nameKeyword = "gold"),
+    OverviewSpec("Золото", "XAU", "usd", exactTicker = "XAU"),
     OverviewSpec("Нефть Brent", "LCOC1", "usd", exactTicker = "LCOC1"),
     OverviewSpec("Биткоин", "BTCUSD", "usd", nameKeyword = "bitcoin"),
 )
