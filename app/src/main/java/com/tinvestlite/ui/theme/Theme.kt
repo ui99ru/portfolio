@@ -2,14 +2,15 @@ package com.tinvestlite.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val DarkColors = darkColorScheme(
-    primary = BrandYellow,
+    primary = BrandSilver,
     onPrimary = Color(0xFF15171C),
-    secondary = BrandYellowDark,
+    secondary = BrandSilverDark,
     background = BackgroundDark,
     onBackground = OnSurfaceDark,
     surface = SurfaceDark,
@@ -29,6 +30,14 @@ fun TInvestLiteTheme(
     MaterialTheme(
         colorScheme = DarkColors,
         typography = AppTypography,
-        content = content,
-    )
+    ) {
+        // Root Surface sets the background and, crucially, the default
+        // content color (onBackground) so screens that aren't wrapped in a
+        // Scaffold still render readable text instead of the M3 default black.
+        Surface(
+            color = MaterialTheme.colorScheme.background,
+            contentColor = MaterialTheme.colorScheme.onBackground,
+            content = content,
+        )
+    }
 }

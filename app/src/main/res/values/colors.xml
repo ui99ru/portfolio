@@ -2,6 +2,6 @@
 <resources>
     <color name="brand_background">@color/brand_background_dark</color>
     <color name="brand_background_dark">#FF0F1115</color>
-    <color name="brand_yellow">#FFFFDD2D</color>
+    <color name="brand_silver">#FFA8B2C2</color>
     <color name="ic_launcher_background">#FF0F1115</color>
 </resources>

@@ -20,6 +20,7 @@ enum class Timeframe(val label: String, val interval: String, val daysBack: Long
     Day("1Д", "CANDLE_INTERVAL_15_MIN", 1),
     Week("1Н", "CANDLE_INTERVAL_HOUR", 7),
     Month("1М", "CANDLE_INTERVAL_DAY", 30),
+    HalfYear("6М", "CANDLE_INTERVAL_DAY", 182),
     Year("1Г", "CANDLE_INTERVAL_DAY", 365),
 }
 

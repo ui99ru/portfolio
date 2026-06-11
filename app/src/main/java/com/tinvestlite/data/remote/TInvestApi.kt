@@ -10,6 +10,8 @@ import com.tinvestlite.data.remote.dto.GetAccountsRequest
 import com.tinvestlite.data.remote.dto.GetAccountsResponse
 import com.tinvestlite.data.remote.dto.GetCandlesRequest
 import com.tinvestlite.data.remote.dto.GetCandlesResponse
+import com.tinvestlite.data.remote.dto.GetClosePricesRequest
+import com.tinvestlite.data.remote.dto.GetClosePricesResponse
 import com.tinvestlite.data.remote.dto.GetLastPricesRequest
 import com.tinvestlite.data.remote.dto.GetLastPricesResponse
 import com.tinvestlite.data.remote.dto.GetOrderBookRequest
@@ -18,6 +20,8 @@ import com.tinvestlite.data.remote.dto.GetOrdersRequest
 import com.tinvestlite.data.remote.dto.GetOrdersResponse
 import com.tinvestlite.data.remote.dto.InstrumentRequest
 import com.tinvestlite.data.remote.dto.InstrumentResponse
+import com.tinvestlite.data.remote.dto.InstrumentsListResponse
+import com.tinvestlite.data.remote.dto.InstrumentsRequest
 import com.tinvestlite.data.remote.dto.OpenSandboxAccountRequest
 import com.tinvestlite.data.remote.dto.OpenSandboxAccountResponse
 import com.tinvestlite.data.remote.dto.OperationsRequest
@@ -80,6 +84,17 @@ interface TInvestApi {
     @POST("tinkoff.public.invest.api.contract.v1.SandboxService/CancelSandboxOrder")
     suspend fun cancelSandboxOrder(@Body body: CancelOrderRequest): CancelOrderResponse
 
+    // ---- Real account: read-only (Users/Operations/Portfolio services) ----
+
+    @POST("tinkoff.public.invest.api.contract.v1.UsersService/GetAccounts")
+    suspend fun getRealAccounts(@Body body: GetAccountsRequest): GetAccountsResponse
+
+    @POST("tinkoff.public.invest.api.contract.v1.OperationsService/GetPortfolio")
+    suspend fun getRealPortfolio(@Body body: PortfolioRequest): PortfolioResponse
+
+    @POST("tinkoff.public.invest.api.contract.v1.OperationsService/GetOperations")
+    suspend fun getRealOperations(@Body body: OperationsRequest): OperationsResponse
+
     // ---- Instruments ----
 
     @POST("tinkoff.public.invest.api.contract.v1.InstrumentsService/FindInstrument")
@@ -88,6 +103,15 @@ interface TInvestApi {
     @POST("tinkoff.public.invest.api.contract.v1.InstrumentsService/GetInstrumentBy")
     suspend fun getInstrumentBy(@Body body: InstrumentRequest): InstrumentResponse
 
+    @POST("tinkoff.public.invest.api.contract.v1.InstrumentsService/Shares")
+    suspend fun getShares(@Body body: InstrumentsRequest): InstrumentsListResponse
+
+    @POST("tinkoff.public.invest.api.contract.v1.InstrumentsService/Bonds")
+    suspend fun getBonds(@Body body: InstrumentsRequest): InstrumentsListResponse
+
+    @POST("tinkoff.public.invest.api.contract.v1.InstrumentsService/Etfs")
+    suspend fun getEtfs(@Body body: InstrumentsRequest): InstrumentsListResponse
+
     // ---- Market data (real quotes) ----
 
     @POST("tinkoff.public.invest.api.contract.v1.MarketDataService/GetCandles")
@@ -95,6 +119,9 @@ interface TInvestApi {
 
     @POST("tinkoff.public.invest.api.contract.v1.MarketDataService/GetLastPrices")
     suspend fun getLastPrices(@Body body: GetLastPricesRequest): GetLastPricesResponse
+
+    @POST("tinkoff.public.invest.api.contract.v1.MarketDataService/GetClosePrices")
+    suspend fun getClosePrices(@Body body: GetClosePricesRequest): GetClosePricesResponse
 
     @POST("tinkoff.public.invest.api.contract.v1.MarketDataService/GetOrderBook")
     suspend fun getOrderBook(@Body body: GetOrderBookRequest): GetOrderBookResponse

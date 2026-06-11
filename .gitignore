@@ -19,6 +19,9 @@ captures/
 *.keystore
 secrets.properties
 keystore.properties
+# ...except the shared signing key committed on purpose so CI-built APKs
+# always share one signature (in-place updates without reinstall).
+!/keystore/tinvest-lite.jks
 
 # Kotlin
 .kotlin/

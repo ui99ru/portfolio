@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -19,10 +20,18 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -30,10 +39,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.tinvestlite.di.AppContainer
 import com.tinvestlite.ui.common.ErrorBox
+import com.tinvestlite.ui.common.InstrumentIcon
 import com.tinvestlite.ui.common.LoadingBox
 import com.tinvestlite.ui.common.vmFactory
 import com.tinvestlite.ui.theme.LossRed
 import com.tinvestlite.ui.theme.ProfitGreen
+import com.tinvestlite.util.InstrumentLogo
 import com.tinvestlite.util.MoneyFormat
 import java.math.BigDecimal
 
@@ -49,6 +60,9 @@ fun InstrumentScreen(
         factory = vmFactory { InstrumentViewModel(container.repository, uid) },
     )
     val state by vm.state.collectAsStateWithLifecycle()
+    val mode by container.tokenStore.mode.collectAsStateWithLifecycle()
+    val tradingEnabled = !mode.isReal
+    var chartType by rememberSaveable { mutableStateOf(ChartType.Line) }
     val title = state.detail?.let { it.ticker.ifBlank { it.name } } ?: "Инструмент"
 
     Scaffold(
@@ -64,20 +78,39 @@ fun InstrumentScreen(
         },
         bottomBar = {
             if (state.detail != null) {
-                Row(
-                    Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Button(
-                        onClick = { onTrade(true) },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = ProfitGreen),
-                    ) { Text("Купить", color = MaterialTheme.colorScheme.onPrimary) }
-                    Button(
-                        onClick = { onTrade(false) },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = LossRed),
-                    ) { Text("Продать", color = MaterialTheme.colorScheme.onPrimary) }
+                // Surface + navigationBarsPadding keeps the buttons above the
+                // system gesture/navigation bar instead of overlapping it.
+                Surface(color = MaterialTheme.colorScheme.background) {
+                    if (tradingEnabled) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Button(
+                                onClick = { onTrade(true) },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = ProfitGreen),
+                            ) { Text("Купить", color = MaterialTheme.colorScheme.onPrimary) }
+                            Button(
+                                onClick = { onTrade(false) },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = LossRed),
+                            ) { Text("Продать", color = MaterialTheme.colorScheme.onPrimary) }
+                        }
+                    } else {
+                        Text(
+                            text = "Реальный счёт — только просмотр. Торговля доступна в режиме песочницы.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .padding(16.dp),
+                        )
+                    }
                 }
             }
         },
@@ -94,12 +127,16 @@ fun InstrumentScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 PriceHeader(state)
+                ChartTypeRow(chartType) { chartType = it }
                 TimeframeRow(state.timeframe, vm::selectTimeframe)
                 if (state.candlesLoading) {
                     LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
                 if (state.candles.isNotEmpty()) {
-                    CandleChart(state.candles)
+                    when (chartType) {
+                        ChartType.Candles -> CandleChart(state.candles)
+                        ChartType.Line -> LineChart(state.candles)
+                    }
                 } else if (!state.candlesLoading) {
                     Text(
                         "Нет данных по свечам за выбранный период.",
@@ -116,16 +153,47 @@ fun InstrumentScreen(
 
 @Composable
 private fun PriceHeader(state: InstrumentUiState) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        state.detail?.name?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        state.detail?.let { detail ->
+            InstrumentIcon(
+                logoUrl = InstrumentLogo.url(detail.brand),
+                fallbackText = detail.ticker.ifBlank { detail.name },
+                size = 48,
+            )
         }
-        Text(
-            text = state.lastPrice?.let { MoneyFormat.price(it) + " " + MoneyFormat.currencySymbol(state.detail?.currency.orEmpty()) }
-                ?: "—",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            state.detail?.name?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(
+                text = state.lastPrice?.let { MoneyFormat.price(it) + " " + MoneyFormat.currencySymbol(state.detail?.currency.orEmpty()) }
+                    ?: "—",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChartTypeRow(selected: ChartType, onSelect: (ChartType) -> Unit) {
+    SingleChoiceSegmentedButtonRow {
+        SegmentedButton(
+            selected = selected == ChartType.Candles,
+            onClick = { onSelect(ChartType.Candles) },
+            shape = SegmentedButtonDefaults.itemShape(0, 2),
+            icon = {},
+        ) { Text("Свечи") }
+        SegmentedButton(
+            selected = selected == ChartType.Line,
+            onClick = { onSelect(ChartType.Line) },
+            shape = SegmentedButtonDefaults.itemShape(1, 2),
+            icon = {},
+        ) { Text("Линия") }
     }
 }
 
